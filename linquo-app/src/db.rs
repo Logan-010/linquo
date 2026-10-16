@@ -3,6 +3,33 @@ use linquo_core::generation::{CefrLevel, Exercise, Language, Lesson};
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
+pub fn supported_language_pairs() -> Vec<(Language, Language)> {
+    Language::supported_pairs()
+}
+
+#[tauri::command]
+pub async fn export_database(app: AppHandle) -> Result<String, String> {
+    let directory = app
+        .path()
+        .download_dir()
+        .or_else(|_| app.path().document_dir())
+        .map_err(crate::errstr)?;
+    tokio::fs::create_dir_all(&directory)
+        .await
+        .map_err(crate::errstr)?;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(crate::errstr)?
+        .as_nanos();
+    let path = directory.join(format!("linquo-{timestamp}.db"));
+    if let Err(error) = app.state::<AppState>().db.export(&path).await {
+        let _ = tokio::fs::remove_file(&path).await;
+        return Err(crate::errstr(error));
+    }
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
 pub async fn import_database(app: AppHandle, bytes: Vec<u8>) -> Result<(), String> {
     if bytes.len() > 100 * 1024 * 1024 || !bytes.starts_with(b"SQLite format 3\0") {
         return Err("Choose a Linquo SQLite database smaller than 100 MB.".into());
@@ -17,10 +44,14 @@ pub async fn import_database(app: AppHandle, bytes: Vec<u8>) -> Result<(), Strin
         .app_cache_dir()
         .map_err(crate::errstr)?
         .join("import.db");
-    std::fs::create_dir_all(path.parent().unwrap()).map_err(crate::errstr)?;
-    std::fs::write(&path, bytes).map_err(crate::errstr)?;
+    tokio::fs::create_dir_all(path.parent().unwrap())
+        .await
+        .map_err(crate::errstr)?;
+    tokio::fs::write(&path, bytes)
+        .await
+        .map_err(crate::errstr)?;
     let result = state.db.import(&path).await.map_err(crate::errstr);
-    let _ = std::fs::remove_file(path);
+    let _ = tokio::fs::remove_file(path).await;
     result?;
     *generator = None;
     *score = None;

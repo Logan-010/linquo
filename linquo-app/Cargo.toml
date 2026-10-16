@@ -21,6 +21,7 @@ log = "0.4"
 serde_json = "1.0.154"
 tauri = { version = "2.12.4", features = [] }
 tauri-plugin-log = "2"
+tokio = { version = "1.53.3", default-features = false, features = ["fs"] }
 
 [features]
 # The Tauri CLI enables this for production builds. Nix enables it explicitly.

@@ -32,6 +32,8 @@ pub fn run() {
             db::kv_put,
             db::kv_rm,
             db::import_database,
+            db::export_database,
+            db::supported_language_pairs,
             db::fetch_excercises,
             db::fetch_lesson,
             generator::init_generation,
