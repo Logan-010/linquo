@@ -5,11 +5,8 @@ use super::{
     CefrLevel, ChoiceData, Direction, Error, Exercise, ExerciseKind, InputLevel, Language, Lesson,
     LessonInput, LocalizedText, MatchPairsData, MatchingPair, Tile, WordBankData,
 };
-use rig::{
-    DynModel,
-    agent::{Agent, AgentBuilder},
-    operation::Completion,
-};
+use rig_agent::agent::{Agent, AgentBuilder};
+use rig_core::{DynModel, operation::Completion};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use std::{collections::HashSet, sync::Arc};
@@ -310,9 +307,10 @@ impl Generator {
                     }
                     Err(error) => return Err(error),
                 },
-                Err(rig::completion::StructuredOutputError::Deserialization { error, .. })
-                    if attempt == 0 =>
-                {
+                Err(rig_agent::completion::StructuredOutputError::Deserialization {
+                    error,
+                    ..
+                }) if attempt == 0 => {
                     prompt = format!(
                         "{request}\nGenerate a complete replacement. The previous JSON did not match the schema: {error}. Return only the requested JSON object with all required fields. Do not generate IDs; use zero-based answer indices as specified."
                     );

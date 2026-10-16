@@ -21,7 +21,7 @@ pub enum Error {
     SerializeError(serde_json::Error),
     /// The model did not produce a valid, structured lesson.
     #[error("Model failed to generate structured output: {0}")]
-    ModelGenerationError(#[from] Box<rig::completion::StructuredOutputError>),
+    ModelGenerationError(#[from] Box<rig_agent::completion::StructuredOutputError>),
     /// The input is invalid
     #[error("Invalid input: {0}")]
     InvalidInput(String),

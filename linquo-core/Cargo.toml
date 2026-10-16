@@ -6,7 +6,9 @@ description = "Linquo core library"
 authors = ["Logan-010"]
 
 [dependencies]
-rig = "0.44.0"
+# Use the components directly: the facade's optional fastembed integration pins old ort.
+rig-core = { version = "0.44.0", features = ["reqwest"] }
+rig-agent = "0.44.0"
 rust-embed = { version = "8.13.0", features = ["compression"] }
 schemars = "1.2.3"
 serde = { version = "1.0.229", features = ["derive"] }

@@ -3,7 +3,7 @@
 //! Use [`connect`] to obtain a completion model that can be passed to
 //! [`crate::generation::Generator::new`].
 
-use rig::{
+use rig_core::{
     DynModel,
     client::EnvError,
     operation::Completion,

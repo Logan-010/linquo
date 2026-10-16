@@ -23,13 +23,14 @@ tauri = { version = "2.12.4", features = [] }
 tauri-plugin-log = "2"
 tokio = { version = "1.53.3", default-features = false, features = ["fs", "sync"] }
 color-eyre = "0.6"
-hf-hub = { version = "0.4.3", default-features = false, features = ["tokio", "rustls-tls"] }
+hf-hub = { version = "1.0.0", default-features = false, features = ["rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
-ort = { version = "=2.0.0-rc.9" }
-ort-sys = "=2.0.0-rc.9"
-ndarray = "0.16"
-rand = "0.8"
-rand_distr = "0.4"
+# Match the ONNX Runtime 1.27 API provided by the Nix environment.
+ort = { version = "=2.0.0-rc.14", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-native", "copy-dylibs", "api-27"] }
+ort-sys = "=2.0.0-rc.14"
+ndarray = "0.17.2"
+rand = "0.10.3"
+rand_distr = "0.6.0"
 unicode-normalization = "0.1"
 
 [features]

@@ -95,9 +95,11 @@ impl Model {
             "Invalid speech configuration"
         );
         let voice: Voice = json(&root.join("voice_styles/M1.json"))?;
+        let environment = ort::init().with_name("linquo-synthesis").build()?;
         let session = |name: &str| -> Result<Session> {
-            Ok(Session::builder()?
-                .with_intra_threads(2)?
+            Ok(Session::builder(&environment)?
+                .with_intra_threads(2)
+                .map_err(ort::Error::<()>::from)?
                 .commit_from_file(root.join(format!("onnx/{name}.onnx")))?)
         };
         Ok(Self {
@@ -155,8 +157,8 @@ impl Model {
             ])?;
             let duration = *outputs["duration"]
                 .try_extract_tensor::<f32>()?
-                .iter()
-                .next()
+                .1
+                .first()
                 .ok_or_else(|| eyre!("Missing duration"))?
                 / (1.05 * rate);
             ensure!(
@@ -173,7 +175,7 @@ impl Model {
             let embedding = &outputs["text_emb"];
             let compress = self.config.ttl.chunk_compress_factor;
             let length = samples.div_ceil(self.config.ae.base_chunk_size * compress);
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             let mut latent = Tensor::from_array(Array3::<f32>::from_shape_fn(
                 (1, self.config.ttl.latent_dim * compress, length),
                 |_| StandardNormal.sample(&mut rng),
@@ -195,7 +197,7 @@ impl Model {
                 ])?;
                 latent = Tensor::from_array(
                     outputs["denoised_latent"]
-                        .try_extract_tensor::<f32>()?
+                        .try_extract_array::<f32>()?
                         .to_owned(),
                 )?;
             }
@@ -203,7 +205,7 @@ impl Model {
             let outputs = self
                 .vocoder
                 .run(vec![("latent", SessionInputValue::from(latent.view()))])?;
-            let data = outputs["wav_tts"].try_extract_tensor::<f32>()?;
+            let (_, data) = outputs["wav_tts"].try_extract_tensor::<f32>()?;
             audio.extend(data.iter().take(samples).map(|v| v.clamp(-1.0, 1.0)));
         }
         Ok((audio, self.config.ae.sample_rate))

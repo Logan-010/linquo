@@ -2,8 +2,8 @@ mod model;
 
 use color_eyre::eyre::{Result, ensure, eyre};
 use hf_hub::{
-    Repo, RepoType,
-    api::tokio::{ApiBuilder, Progress},
+    HFClient,
+    progress::{DownloadEvent, FileStatus, ProgressEvent, ProgressHandler},
 };
 use std::{
     collections::VecDeque,
@@ -16,7 +16,8 @@ use std::{
 };
 use tauri::{AppHandle, Manager};
 
-const REPOSITORY: &str = "supertone-oss-archive/supertonic-3";
+const REPOSITORY_OWNER: &str = "supertone-oss-archive";
+const REPOSITORY: &str = "supertonic-3";
 const REVISION: &str = "aafc6e32416a594460b32413efc49d7fe4ce6d46";
 // Sizes belong to the pinned snapshot above; also reject truncated cache files.
 const FILES: &[(&str, u64)] = &[
@@ -58,9 +59,10 @@ impl Synthesis {
             .lock()
             .map_err(|_| "Speech worker unavailable")?;
         if let Some((current, cancelled)) = request.as_ref()
-            && current == id {
-                cancelled.store(true, Ordering::Relaxed);
-            }
+            && current == id
+        {
+            cancelled.store(true, Ordering::Relaxed);
+        }
         Ok(())
     }
 }
@@ -146,16 +148,32 @@ struct FileProgress<F> {
     file: String,
 }
 
-impl<F: FnMut(u64, u64, &str) + Send> Progress for FileProgress<F> {
-    async fn init(&mut self, _size: usize, _filename: &str) {}
-
-    async fn update(&mut self, size: usize) {
+impl<F: FnMut(u64, u64, &str) + Send> ProgressHandler for FileProgress<F> {
+    fn on_progress(&self, event: &ProgressEvent) {
+        let completed = match event {
+            ProgressEvent::Download(DownloadEvent::Progress { files }) => files
+                .iter()
+                .filter(|file| file.filename == self.file)
+                .map(|file| {
+                    if file.status == FileStatus::Complete {
+                        self.size
+                    } else {
+                        file.bytes_completed
+                    }
+                })
+                .max()
+                .unwrap_or(0),
+            ProgressEvent::Download(DownloadEvent::AggregateProgress {
+                bytes_completed, ..
+            }) => *bytes_completed,
+            ProgressEvent::Download(DownloadEvent::Complete) => self.size,
+            _ => return,
+        };
         let mut downloaded = self.downloaded.lock().unwrap();
-        *downloaded = (*downloaded + size as u64).min(self.size);
+        // File and aggregate events both contain cumulative counts and may overlap.
+        *downloaded = (*downloaded).max(completed).min(self.size);
         (self.callback.lock().unwrap())(self.completed + *downloaded, self.total, &self.file);
     }
-
-    async fn finish(&mut self) {}
 }
 
 async fn download_weights(
@@ -178,15 +196,10 @@ async fn download_weights(
     }
     (progress.lock().unwrap())(downloaded, total, "");
     // Keep the Hub cache inside the app cache so deleting weights removes it too.
-    let repo = ApiBuilder::new()
-        .with_cache_dir(root.join("hf-hub"))
-        .with_progress(false)
+    let repo = HFClient::builder()
+        .cache_dir(root.join("hf-hub"))
         .build()?
-        .repo(Repo::with_revision(
-            REPOSITORY.into(),
-            RepoType::Model,
-            REVISION.into(),
-        ));
+        .model(REPOSITORY_OWNER, REPOSITORY);
     for (file, size) in missing {
         let path = root.join(file);
         tokio::fs::create_dir_all(path.parent().unwrap()).await?;
@@ -194,17 +207,18 @@ async fn download_weights(
         (progress.lock().unwrap())(downloaded, total, file);
         let result: Result<()> = async {
             let cached = repo
-                .download_with_progress(
-                    file,
-                    FileProgress {
-                        callback: progress.clone(),
-                        downloaded: Arc::new(Mutex::new(0)),
-                        completed: downloaded,
-                        size,
-                        total,
-                        file: file.to_owned(),
-                    },
-                )
+                .download_file()
+                .filename(file)
+                .revision(REVISION)
+                .progress(FileProgress {
+                    callback: progress.clone(),
+                    downloaded: Arc::new(Mutex::new(0)),
+                    completed: downloaded,
+                    size,
+                    total,
+                    file: file.to_owned(),
+                })
+                .send()
                 .await?;
             ensure!(
                 tokio::fs::metadata(&cached).await?.len() == size,
@@ -339,6 +353,51 @@ pub fn cancel_speech(state: tauri::State<'_, Synthesis>, request_id: String) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn download_progress_handles_overlapping_events_and_cache_hits() {
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let updates = observed.clone();
+        let progress = FileProgress {
+            callback: Arc::new(Mutex::new(move |downloaded, total, file: &str| {
+                assert_eq!(total, 150);
+                assert_eq!(file, "model.onnx");
+                updates.lock().unwrap().push(downloaded);
+            })),
+            downloaded: Arc::new(Mutex::new(0)),
+            completed: 50,
+            size: 100,
+            total: 150,
+            file: "model.onnx".into(),
+        };
+        for bytes_completed in [40, 40, 20, 200] {
+            progress.on_progress(
+                &DownloadEvent::AggregateProgress {
+                    bytes_completed,
+                    total_bytes: 100,
+                    bytes_per_sec: None,
+                }
+                .into(),
+            );
+        }
+        progress.on_progress(&DownloadEvent::Complete.into());
+        assert_eq!(*observed.lock().unwrap(), [90, 90, 90, 150, 150]);
+
+        // Cache hits can report completion with zero bytes and no Start event.
+        *progress.downloaded.lock().unwrap() = 0;
+        progress.on_progress(
+            &DownloadEvent::Progress {
+                files: vec![hf_hub::progress::FileProgress {
+                    filename: "model.onnx".into(),
+                    bytes_completed: 0,
+                    total_bytes: 0,
+                    status: FileStatus::Complete,
+                }],
+            }
+            .into(),
+        );
+        assert_eq!(*observed.lock().unwrap().last().unwrap(), 150);
+    }
 
     #[test]
     fn new_speech_cancels_old_inference_and_late_cancellation_is_scoped() {
