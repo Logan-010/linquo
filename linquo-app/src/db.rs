@@ -1,5 +1,5 @@
 use crate::state::AppState;
-use linquo_core::generation::{CefrLevel, Exercise, Language};
+use linquo_core::generation::{CefrLevel, Exercise, Language, Lesson};
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
@@ -44,6 +44,20 @@ pub async fn fetch_excercises(
     app.state::<AppState>()
         .db
         .fetch_exercises(n, level, source, target)
+        .await
+        .map_err(crate::errstr)
+}
+
+#[tauri::command]
+pub async fn fetch_lesson(
+    app: AppHandle,
+    level: CefrLevel,
+    source: Language,
+    target: Language,
+) -> Result<Option<Lesson>, String> {
+    app.state::<AppState>()
+        .db
+        .fetch_lesson(level, source, target)
         .await
         .map_err(crate::errstr)
 }

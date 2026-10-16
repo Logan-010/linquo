@@ -1,10 +1,9 @@
-use std::env;
-
 use crate::state::AppState;
 use linquo_core::{
     generation::{Generator, InputLevel, Language, Lesson, LessonInput},
     provider,
 };
+use std::env;
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
@@ -17,7 +16,7 @@ pub async fn init_generation(
     target: Language,
 ) -> Result<(), String> {
     if let Some(url) = base_url {
-        // SAFETY: These variables are not used in seperate threads and therefore do not cause race conditions.
+        // SAFETY: These variables do not cause race conditions.
         unsafe {
             env::set_var("OLLAMA_API_BASE_URL", &url);
             env::set_var("OPENAI_BASE_URL", &url);

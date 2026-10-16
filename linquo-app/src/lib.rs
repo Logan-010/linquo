@@ -31,6 +31,7 @@ pub fn run() {
             db::kv_put,
             db::kv_rm,
             db::fetch_excercises,
+            db::fetch_lesson,
             generator::init_generation,
             generator::generate_lesson
         ])
