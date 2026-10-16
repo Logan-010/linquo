@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "check": "tsc --noEmit",
+    "test:speech": "node --experimental-vm-modules --test tests/useSpeech.test.mjs",
     "build": "npm run check && vite build",
     "preview": "vite preview"
   },

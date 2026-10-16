@@ -48,13 +48,16 @@ export function Question({ exercise: ex, romanize, speech, disabled, onAnswer }:
   }
   return <>
     <div class="question-heading"><span class="eyebrow">{t(`exercise.types.${ex.type}`)}</span><h2>{ex.instruction}</h2></div>
-    {ex.prompt && <div class="prompt"><LocalText value={ex.prompt} romanize={romanize}/>{speech && <button type="button" class="text-button" onClick={() => speak(ex.prompt!.text)}>{t('speech.replay')}</button>}</div>}
+    {ex.prompt && <div class="prompt"><LocalText value={ex.prompt} romanize={romanize}/>{speech && <div class="speech-controls">
+      <button type="button" class="btn secondary" onClick={() => speak(ex.prompt!.text)}><Icon name="volume"/>{t('speech.replay')}</button>
+      <button type="button" class="btn secondary" onClick={() => speak(ex.prompt!.text, { rate: 0.75 })}><Icon name="volume"/>{t('speech.replaySlow')}</button>
+    </div>}</div>}
     {speechError && <p class="notice error" role="alert">{speechError}</p>}
-    <fieldset disabled={disabled} class="question-inputs" onClick={event => {
+    <fieldset disabled={disabled} class="question-inputs" onClickCapture={event => {
       if (disabled) return;
       const button = (event.target as HTMLElement).closest('button');
       const text = button?.querySelector('.localized')?.firstChild?.textContent;
-      if (button && !button.disabled && text) speak(text);
+      if (button && !button.disabled && text) speak(text, { interrupt: false });
     }}>
       <legend class="sr-only">{t('exercise.answer')}</legend>
       {ex.type === 'word_bank_translation' && <>
@@ -71,8 +74,8 @@ export function Question({ exercise: ex, romanize, speech, disabled, onAnswer }:
     <div class="question-actions">
       <button class="text-button" disabled={disabled} onClick={() => setHint(!hint)}>{t(hint ? 'exercise.hideHint' : 'exercise.hint')}</button>
       <div class="actions">
-        <button type="button" class="btn secondary" disabled={disabled} onClick={() => void onAnswer(false, solution)}>{t('exercise.dontKnow')}</button>
-        <button class="btn primary" disabled={!ready || disabled} onClick={() => void onAnswer(correct, solution)}>{t(disabled ? 'common.saving' : 'exercise.check')}<Icon name="check"/></button>
+        <button type="button" class="btn secondary" disabled={disabled} onClick={() => { if (ex.type !== 'match_pairs') speak(solution); void onAnswer(false, solution); }}>{t('exercise.dontKnow')}</button>
+        <button class="btn primary" disabled={!ready || disabled} onClick={() => { if (ex.type !== 'match_pairs') speak(solution); void onAnswer(correct, solution); }}>{t(disabled ? 'common.saving' : 'exercise.check')}<Icon name="check"/></button>
       </div>
     </div>
     {hint && <p class="hint">{ex.hint}</p>}

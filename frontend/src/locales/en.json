@@ -11,7 +11,8 @@
     "working": "Updating speech weights… This may take several minutes.",
     "ready": "Speech weights are downloaded and ready for offline use.",
     "missing": "Speech weights must be downloaded before playback (approximately 400 MB).",
-    "replay": "Read question aloud"
+    "replay": "Read question aloud",
+    "replaySlow": "Read slowly (0.75×)"
   },
   "app": {
     "name": "Linquo", "wordmark": "linquo", "home": "Linquo home",
