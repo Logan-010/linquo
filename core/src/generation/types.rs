@@ -1,5 +1,6 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use sqlx::prelude::FromRow;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -93,7 +94,7 @@ pub enum CefrLevel {
     C2,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, FromRow)]
 pub struct ExerciseOutput {
     pub source_language: Language,
     pub learning_language: Language,
@@ -103,13 +104,11 @@ pub struct ExerciseOutput {
     pub exercises: Vec<Exercise>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, FromRow)]
 pub struct Exercise {
     pub id: String,
-
     #[serde(flatten)]
     pub kind: ExerciseKind,
-
     pub direction: Direction,
     pub instruction: String,
     pub prompt: Option<LocalizedText>,
