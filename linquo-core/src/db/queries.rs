@@ -5,6 +5,40 @@ use crate::{
 use sqlx::{Row, SqlitePool, sqlite::SqliteRow};
 use uuid::Uuid;
 
+pub async fn get_value(pool: &SqlitePool, key: &str) -> Result<Option<String>, Error> {
+    Ok(
+        sqlx::query_scalar("SELECT value FROM key_value_store WHERE key = ?")
+            .bind(key)
+            .fetch_optional(pool)
+            .await?,
+    )
+}
+
+pub async fn insert_value(pool: &SqlitePool, key: &str, value: &str) -> Result<(), Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO key_value_store (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        "#,
+    )
+    .bind(key)
+    .bind(value)
+    .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn remove_value(pool: &SqlitePool, key: &str) -> Result<(), Error> {
+    sqlx::query("DELETE FROM key_value_store WHERE key = ?")
+        .bind(key)
+        .execute(pool)
+        .await?;
+
+    Ok(())
+}
+
 pub async fn insert_lesson(pool: &SqlitePool, lesson: &Lesson) -> Result<Uuid, Error> {
     let lesson_id = Uuid::now_v7();
     let lesson_id_str = lesson_id.to_string();

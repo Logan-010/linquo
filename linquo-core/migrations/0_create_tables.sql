@@ -1,5 +1,10 @@
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE key_value_store (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE lessons (
     id TEXT PRIMARY KEY NOT NULL,
 
@@ -52,4 +57,3 @@ CREATE TABLE exercises (
 
 CREATE INDEX idx_exercises_lesson_id
     ON exercises(lesson_id);
-

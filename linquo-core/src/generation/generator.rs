@@ -1,3 +1,6 @@
+//! The [`Generator`] produces lessons from a completion model for a
+//! supported language pair.
+
 use super::{Error, Language, Lesson, LessonInput};
 use rig::{
     DynModel,
@@ -6,12 +9,23 @@ use rig::{
 };
 use std::sync::Arc;
 
+/// Generates language learning lessons using a rig completion model.
+///
+/// A generator is bound to a specific source and learning language pair and
+/// is cheap to clone. Create one with [`Generator::new`], then call
+/// [`Generator::generate`] to produce a [`Lesson`].
 #[derive(Clone)]
 pub struct Generator {
     agent: Arc<Agent>,
 }
 
 impl Generator {
+    /// Create a new generator for the given language pair.
+    ///
+    /// `native_language` is the learner's source language and
+    /// `learning_language` is the language being learned. Returns
+    /// [`Error::UnsupportedLanguagePair`] if no system prompt exists for the
+    /// pair.
     pub fn new(
         model: impl Into<DynModel<Completion>>,
         native_language: Language,
@@ -30,7 +44,13 @@ impl Generator {
         })
     }
 
+    /// Generate a lesson for the given input.
+    ///
+    /// The model produces a typed [`Lesson`] matching the requested
+    /// [`Language`], level, and number of exercises described by `input`.
     pub async fn generate(&self, input: &LessonInput) -> Result<Lesson, Error> {
+        input.validate().map_err(Error::InvalidInput)?;
+
         let response = self
             .agent
             .prompt_typed::<Lesson>(serde_json::to_string(input).map_err(Error::SerializeError)?)

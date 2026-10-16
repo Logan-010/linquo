@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["core"]
+members = ["linquo-core"]
 
 [workspace.dependencies]
-linquo-core = { path = "core" }
+linquo-core = { path = "linquo-core" }
 
 [profile.release]
 lto = "fat"
