@@ -1,3 +1,4 @@
+use rust_embed::Embed;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::prelude::FromRow;
@@ -19,29 +20,36 @@ pub enum Language {
     Korean,
 }
 
+#[derive(Embed)]
+#[folder = "prompts"]
+struct Prompts;
+
 impl Language {
-    pub fn system_prompt(native: Language, learning: Language) -> Option<&'static str> {
-        match (native, learning) {
-            (Language::English, Language::Korean) => {
-                Some(include_str!("../../prompts/english_learning_korean.txt"))
-            }
-            _ => None,
-        }
+    pub fn system_prompt(native: Language, learning: Language) -> Option<String> {
+        let file_path = match (native, learning) {
+            (Language::English, Language::Korean) => "english_learning_korean.txt",
+            _ => return None,
+        };
+
+        Some(
+            Prompts::get(file_path)
+                .and_then(|c| String::from_utf8(c.data.to_vec()).ok())
+                .expect("Expected valid prompt"),
+        )
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExerciseInput {
+pub struct LessonInput {
     pub source_language: Language,
     pub learning_language: Language,
     pub learning_level: InputLevel,
     pub number_of_exercises: u8,
-
     #[serde(default)]
     pub include_romanization: bool,
 }
 
-impl ExerciseInput {
+impl LessonInput {
     pub fn new(
         source_language: Language,
         learning_language: Language,
@@ -84,7 +92,7 @@ pub enum InputLevel {
     Numeric(u8),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Hash)]
 pub enum CefrLevel {
     A1,
     A2,
@@ -95,7 +103,7 @@ pub enum CefrLevel {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, FromRow)]
-pub struct ExerciseOutput {
+pub struct Lesson {
     pub source_language: Language,
     pub learning_language: Language,
     pub learning_level: CefrLevel,
@@ -190,6 +198,6 @@ pub struct ExerciseError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GeneratorResponse {
-    Success(ExerciseOutput),
+    Success(Lesson),
     Error(ExerciseErrorResponse),
 }

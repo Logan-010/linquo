@@ -1,4 +1,4 @@
-use super::{Error, ExerciseInput, ExerciseOutput, Language};
+use super::{Error, Language, Lesson, LessonInput};
 use rig::{
     DynModel,
     agent::{Agent, AgentBuilder},
@@ -30,12 +30,10 @@ impl Generator {
         })
     }
 
-    pub async fn generate(&self, input: &ExerciseInput) -> Result<ExerciseOutput, Error> {
+    pub async fn generate(&self, input: &LessonInput) -> Result<Lesson, Error> {
         let response = self
             .agent
-            .prompt_typed::<ExerciseOutput>(
-                serde_json::to_string(input).map_err(Error::SerializeError)?,
-            )
+            .prompt_typed::<Lesson>(serde_json::to_string(input).map_err(Error::SerializeError)?)
             .await
             .map_err(Box::new)?;
 
