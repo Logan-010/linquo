@@ -55,7 +55,13 @@ function Question({ exercise: ex, romanize, disabled, onAnswer }: { exercise: Ex
         return <button key={item.id} type="button" class={`tile match-tile ${sourceId ? 'paired' : ''}`} disabled={!left || Boolean(sourceId)} onClick={() => { if (left) { setMatches({ ...matches, [left]: item.id }); setLeft(null); } }}><span class="pair-number">{number || '·'}</span><LocalText value={item.target} romanize={romanize}/></button>;
       })}</div></div></>}
     </fieldset>
-    <div class="question-actions"><button class="text-button" disabled={disabled} onClick={() => setHint(!hint)}>{t(hint ? 'exercise.hideHint' : 'exercise.hint')}</button><button class="btn primary" disabled={!ready || disabled} onClick={() => void onAnswer(correct, solution)}>{t(disabled ? 'common.saving' : 'exercise.check')}<Icon name="check"/></button></div>
+    <div class="question-actions">
+      <button class="text-button" disabled={disabled} onClick={() => setHint(!hint)}>{t(hint ? 'exercise.hideHint' : 'exercise.hint')}</button>
+      <div class="actions">
+        <button type="button" class="btn secondary" disabled={disabled} onClick={() => void onAnswer(false, solution)}>{t('exercise.dontKnow')}</button>
+        <button class="btn primary" disabled={!ready || disabled} onClick={() => void onAnswer(correct, solution)}>{t(disabled ? 'common.saving' : 'exercise.check')}<Icon name="check"/></button>
+      </div>
+    </div>
     {hint && <p class="hint">{ex.hint}</p>}
   </>;
 }

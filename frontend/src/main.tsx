@@ -171,7 +171,7 @@ function App() {
         await refreshLibrary();
         setNotice(t('notices.generated', { count: lesson.exercises.length, level: lesson.learning_level })); setPage('learn');
       }
-    } catch (error) { report(error); await refreshLibrary().catch(() => {}); }
+    } catch (error) { report(error); await refreshLibrary().catch(() => { }); }
     finally { setBusy(''); }
   }
   async function finish(correct: number, total: number) {
@@ -192,139 +192,138 @@ function App() {
   return <div class="app-shell">
     <aside class="sidebar">
       <a href="#" class="brand" onClick={e => { e.preventDefault(); if (!session && !busy) { setPage('learn'); setSummary(null); } }} aria-label={t('app.home')}>
-        <img class="brand-mark" src={appIcon} alt="" width={32} height={32}/>{t('app.wordmark')}<span class="brand-dot">.</span>
+        <img class="brand-mark" src={appIcon} alt="" width={32} height={32} />{t('app.wordmark')}<span class="brand-dot">.</span>
       </a>
       <span class="sidebar-label">{t('app.tagline')}</span>
       <nav aria-label={t('app.navigation')}>
         {([{ id: 'learn', icon: 'book' }, { id: 'generate', icon: 'spark' }, { id: 'settings', icon: 'settings' }] as const).map(item =>
           <button key={item.id} disabled={Boolean(session) || Boolean(busy)} class={`nav-item ${page === item.id ? 'active' : ''}`} aria-current={page === item.id ? 'page' : undefined} onClick={() => { setPage(item.id); setSummary(null); setNotice(''); setError(''); }}>
-            <Icon name={item.icon}/><span>{t(`nav.${item.id}`)}</span>{item.id === 'generate' && <span class="nav-plus" aria-hidden="true">+</span>}
+            <Icon name={item.icon} /><span>{t(`nav.${item.id}`)}</span>{item.id === 'generate' && <span class="nav-plus" aria-hidden="true">+</span>}
           </button>,
         )}
       </nav>
       <div class="sidebar-footer">
-        <div class="offline-mark"><span/>{t(offline ? 'app.offlineNotice' : 'app.offlineFirst')}</div>
+        <div class="offline-mark"><span />{t(offline ? 'app.offlineNotice' : 'app.offlineFirst')}</div>
         <p>{t('app.sidebarNote')}</p><span class="version">{t('app.version', { version: '0.1' })}</span>
       </div>
     </aside>
     <div class="main-shell">
       <header class="topbar">
-        <div class="language-pill"><Icon name="globe"/><span>{languageName(pair.target)} <span class="muted">{t('app.from', { language: languageName(pair.source) })}</span></span></div>
-        <span class="device-status"><span class="status-dot"/>{t(offline ? 'app.offline' : 'app.local')}</span>
+        <div class="language-pill"><Icon name="globe" /><span>{languageName(pair.target)} <span class="muted">{t('app.from', { language: languageName(pair.source) })}</span></span></div>
+        <span class="device-status"><span class="status-dot" />{t(offline ? 'app.offline' : 'app.local')}</span>
       </header>
       <main id="main-content">
         {!isTauri() && <div class="notice" role="status"><strong>{t('app.previewTitle')}</strong> {t('app.previewBody')}</div>}
-        {error && <div class="notice error" role="alert"><span>{error}</span><button class="icon-button" aria-label={t('common.dismissError')} onClick={() => setError('')}><Icon name="close" size={16}/></button></div>}
-        {notice && <div class="notice success" role="status"><Icon name="check"/><span>{notice}</span></div>}
-        {busy === 'generation' && page !== 'generate' && <div class="notice" role="status"><span class="spinner"/>{generationMessage}</div>}
-        {busy === 'export' && <div class="notice" role="status"><span class="spinner"/>{t('busy.exporting')}</div>}
+        {error && <div class="notice error" role="alert"><span>{error}</span><button class="icon-button" aria-label={t('common.dismissError')} onClick={() => setError('')}><Icon name="close" size={16} /></button></div>}
+        {notice && <div class="notice success" role="status"><Icon name="check" /><span>{notice}</span></div>}
+        {busy === 'generation' && page !== 'generate' && <div class="notice" role="status"><span class="spinner" />{generationMessage}</div>}
+        {busy === 'export' && <div class="notice" role="status"><span class="spinner" />{t('busy.exporting')}</div>}
         {!ready ? <div class="loading-state">
-          <span class="spinner"/><h2>{t('app.opening')}</h2>
-          {error && <div class="actions"><button class="btn secondary" onClick={() => void boot().catch(report)}>{t('common.retry')}</button><ImportButton onImport={imported} onError={report}/></div>}
+          <span class="spinner" /><h2>{t('app.opening')}</h2>
+          {error && <div class="actions"><button class="btn secondary" onClick={() => void boot().catch(report)}>{t('common.retry')}</button><ImportButton onImport={imported} onError={report} /></div>}
         </div>
-        : session ? <ExerciseSession items={session.items} assessment={session.assessment} romanize={settings.romanize} onFinish={finish} onExit={() => {
-          setSession(null);
-          if (known) void invoke<Level>('load_score', { ...pair, quiz: false }).then(setLevel).catch(report);
-        }}/>
-        : summary ? <section class="card summary">
-          <span class="summary-icon"><Icon name={summary.assessment ? 'chart' : 'check'} size={40}/></span>
-          <span class="eyebrow">{t(summary.assessment ? 'summary.assessmentEyebrow' : 'summary.eyebrow')}</span>
-          <h1>{summary.assessment ? t('summary.assessmentTitle', { level: summary.level }) : t('summary.title')}</h1>
-          <p>{summary.assessment ? t('summary.assessmentDescription', { proficiency: proficiency(summary.level), language: languageName(pair.target) }) : t('summary.description')}</p>
-          <div class="summary-stats">
-            <div><strong>{t('common.fraction', { current: summary.correct, total: summary.total })}</strong><span>{t('summary.correct')}</span></div>
-            <div><strong>{percent(summary.correct / summary.total * 100)}</strong><span>{t('summary.accuracy')}</span></div>
-            <div><strong>{summary.level}</strong><span>{t('summary.level')}</span></div>
-          </div>
-          <button class="btn primary" onClick={() => { setSummary(null); setPage('learn'); }}>{t('summary.back')}<Icon name="arrow"/></button>
-        </section>
-        : setup ? <section class="onboarding">
-          <div class="page-heading"><span class="eyebrow">{t('setup.eyebrow')}</span><h1>{t('setup.title')}</h1><p>{t('setup.description')}</p></div>
-          <div class="card setup-card">
-            <div class="step-label"><span>{t('setup.step')}</span>{t('setup.stepLabel')}</div>
-            <h2>{t('setup.providerTitle')}</h2><p>{t('setup.providerDescription')}</p>
-            <SettingsForm key="setup" initial={settings} pairs={pairs} busy={Boolean(busy)} setup onSave={saveSettings}/>
-            <div class="import-divider"><span>{t('setup.existing')}</span></div><ImportButton onImport={imported} onError={report} disabled={Boolean(busy)}/>
-          </div>
-          <p class="onboarding-note"><Icon name="globe" size={16}/>{t('setup.note')}</p>
-        </section>
-        : <>
-          {page === 'learn' && <>
-            <div class="page-heading">
-              <span class="eyebrow">{t('home.eyebrow')}</span><h1>{t(known ? 'home.title' : 'home.newTitle')}</h1><p>{t(known ? 'home.description' : 'home.newDescription')}</p>
-            </div>
-            <div class="dashboard-grid">
-              <section class="card hero-card">
-                <div class="hero-copy">
-                  <span class="badge">{known ? t('common.levelName', { level, name: proficiency(level) }) : t('home.badge')}</span>
-                  <h2>{t(known ? 'home.heroTitle' : 'home.newHeroTitle')}</h2><p>{t(known ? 'home.heroDescription' : 'home.newHeroDescription')}</p>
-                  {known ? <button class="btn primary" disabled={disabled} onClick={() => available[level] ? void startLesson() : setPage('generate')}>
-                    {t(busy === 'lesson' ? 'home.opening' : available[level] ? 'home.startLesson' : 'home.createLesson')}<Icon name="arrow"/>
-                  </button> : <div class="hero-actions">
-                    <button class="btn primary" disabled={disabled} onClick={() => totalExercises ? void startAssessment() : void generate(true)}>
-                      {t(busy ? 'home.preparing' : totalExercises ? 'home.startAssessment' : 'home.generateAssessment')}<Icon name={totalExercises ? 'arrow' : 'spark'}/>
-                    </button>
-                    {totalExercises > 0 && activeLevels.length < levels.length && <small>{t('home.partialCheck')}</small>}
-                  </div>}
-                </div>
-                <div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"/><div class="orbit orbit-two"/><span class="art-symbol symbol-one"><Icon name="globe" size={74}/></span><span class="art-symbol symbol-two"><Icon name="spark" size={56}/></span><span class="art-dot dot-one"/><span class="art-dot dot-two"/><span class="art-caption">{t('home.artCaption')}</span></div>
-              </section>
-              <section class="card progress-card">
-                <div class="card-title"><Icon name="chart"/><h3>{t('home.progress')}</h3></div>
-                <div class="current-level">{known ? level : t('common.unknown')}<span>{known ? proficiency(level) : t('home.discover')}</span></div>
-                <div class="level-steps" aria-label={known ? t('home.proficiency', { level }) : t('home.unassessed')}>
-                  {levels.map(l => <span key={l} class={known && levels.indexOf(l) <= levels.indexOf(level) ? 'filled' : ''}>{l}</span>)}
-                </div>
-                <div class="progress-bottom"><div><strong>{stats.lessons}</strong><span>{t('home.sessions')}</span></div><div><strong>{stats.answers ? percent(stats.correct / stats.answers * 100) : t('common.unknown')}</strong><span>{t('home.accuracy')}</span></div></div>
-              </section>
-            </div>
-            <section class="library-section">
-              <div class="section-heading"><div><span class="eyebrow">{t('home.libraryEyebrow')}</span><h2>{t('home.library')}</h2></div><span class="count-label">{t('home.saved', { count: totalExercises, suffix: Object.values(available).includes(1000) ? '+' : '' })}</span></div>
-              {activeLevels.length ? <div class="library-grid">
-                {activeLevels.map(l => <button key={l} class="card level-card" disabled={disabled} onClick={() => known ? void startLesson(l) : void startAssessment()}>
-                  <span class="level-icon">{l}</span><div><h3>{proficiency(l)}</h3><p>{t('home.saved', { count: available[l] || 0, suffix: available[l] === 1000 ? '+' : '' })}</p></div><Icon name="arrow"/>
-                </button>)}
-              </div> : <div class="card empty-library">
-                <div class="empty-icon"><Icon name="book" size={28}/></div><div><h3>{t('home.emptyTitle')}</h3><p>{t('home.emptyDescription')}</p></div>
-                <button class="btn secondary" disabled={Boolean(busy)} onClick={() => setPage('generate')}>{t('home.addExercises')}<Icon name="spark"/></button>
-              </div>}
-            </section>
-            <div class="quiet-note"><Icon name="globe" size={18}/><p>{t('home.note')}</p></div>
-          </>}
-          {page === 'generate' && <>
-            <div class="page-heading"><span class="eyebrow">{t('generation.eyebrow')}</span><h1>{t('generation.title')}</h1><p>{t('generation.description')}</p></div>
-            <div class="settings-layout">
-              <section class="card settings-card">
-                <div class="card-title"><Icon name="spark"/><h2>{t(known ? 'generation.lessonTitle' : 'generation.assessmentTitle')}</h2></div>
-                <p>{t(known ? 'generation.lessonDescription' : 'generation.assessmentDescription')}</p>
-                <dl class="generation-details">
-                  <div><dt>{t('generation.language')}</dt><dd>{pairLabel}</dd></div>
-                  <div><dt>{t('generation.provider')}</dt><dd>{settings.provider || t('common.notConfigured')}</dd></div>
-                  <div><dt>{t('generation.level')}</dt><dd>{known ? settings.level === 'auto' ? t('generation.autoLevel', { level }) : settings.level : t('generation.allLevels')}</dd></div>
-                  <div><dt>{t('generation.exercises')}</dt><dd>{known ? settings.count : t('generation.assessmentCount')}</dd></div>
-                  <div><dt>{t('generation.romanization')}</dt><dd>{t(settings.romanize ? 'common.included' : 'common.notIncluded')}</dd></div>
-                </dl>
-                <div class="actions"><button class="btn primary" disabled={disabled} onClick={() => void generate(!known)}><Icon name="spark"/>{t(busy ? 'generation.generating' : known ? 'generation.generateLesson' : 'generation.generateAssessment')}</button><button class="btn secondary" disabled={Boolean(busy)} onClick={() => setPage('settings')}>{t('common.configure')}</button></div>
-                {busy === 'generation' && <div class="generation-status" role="status"><span class="spinner"/><span>{generationMessage}<small>{t('generation.statusNote')}</small></span></div>}
-              </section>
-              <aside class="card tip-card"><span class="eyebrow">{t('generation.tipEyebrow')}</span><h3>{t('generation.tipTitle')}</h3><p>{t('generation.tipDescription')}</p><div class="divider"/><p>{t('generation.providerNote')}</p>{!known && totalExercises > 0 && <button class="text-button" disabled={Boolean(busy)} onClick={() => void startAssessment()}>{t('generation.useSaved')}</button>}</aside>
-            </div>
-          </>}
-          {page === 'settings' && <>
-            <div class="page-heading"><span class="eyebrow">{t('settings.eyebrow')}</span><h1>{t('settings.title')}</h1><p>{t('settings.description')}</p></div>
-            <div class="settings-layout">
-              <section class="card settings-card"><div class="card-title"><Icon name="settings"/><h2>{t('settings.preferences')}</h2></div><SettingsForm key={formKey} initial={settings} pairs={pairs} busy={disabled} onSave={saveSettings}/></section>
-              <div class="settings-aside">
-                <section class="card tip-card"><span class="eyebrow">{t('settings.pairEyebrow')}</span><h3>{pairLabel}</h3><p>{t('settings.pairHelp')}</p></section>
-                <section class="card tip-card">
-                  <span class="eyebrow">{t('settings.databaseEyebrow')}</span><h3>{t('settings.databaseTitle')}</h3><p>{t('settings.databaseDescription')}</p>
-                  <div class="database-actions"><ImportButton onImport={imported} onError={report} disabled={disabled}/><button class="btn secondary" disabled={disabled} onClick={() => void exportDatabase()}><Icon name="download"/>{t(busy === 'export' ? 'database.exporting' : 'database.export')}</button></div>
-                </section>
-                {settings.provider && <section class="card tip-card"><h3>{t('settings.disconnect')}</h3><p>{t('settings.disconnectDescription')}</p><button class="text-button" disabled={Boolean(busy)} onClick={() => void disconnect()}>{t('settings.removeProvider')}</button></section>}
+          : session ? <ExerciseSession items={session.items} assessment={session.assessment} romanize={settings.romanize} onFinish={finish} onExit={() => {
+            setSession(null);
+            if (known) void invoke<Level>('load_score', { ...pair, quiz: false }).then(setLevel).catch(report);
+          }} />
+            : summary ? <section class="card summary">
+              <span class="summary-icon"><Icon name={summary.assessment ? 'chart' : 'check'} size={40} /></span>
+              <span class="eyebrow">{t(summary.assessment ? 'summary.assessmentEyebrow' : 'summary.eyebrow')}</span>
+              <h1>{summary.assessment ? t('summary.assessmentTitle', { level: summary.level }) : t('summary.title')}</h1>
+              <p>{summary.assessment ? t('summary.assessmentDescription', { proficiency: proficiency(summary.level), language: languageName(pair.target) }) : t('summary.description')}</p>
+              <div class="summary-stats">
+                <div><strong>{t('common.fraction', { current: summary.correct, total: summary.total })}</strong><span>{t('summary.correct')}</span></div>
+                <div><strong>{percent(summary.correct / summary.total * 100)}</strong><span>{t('summary.accuracy')}</span></div>
+                <div><strong>{summary.level}</strong><span>{t('summary.level')}</span></div>
               </div>
-            </div>
-          </>}
-        </>}
+              <button class="btn primary" onClick={() => { setSummary(null); setPage('learn'); }}>{t('summary.back')}<Icon name="arrow" /></button>
+            </section>
+              : setup ? <section class="onboarding">
+                <div class="page-heading"><span class="eyebrow">{t('setup.eyebrow')}</span><h1>{t('setup.title')}</h1><p>{t('setup.description')}</p></div>
+                <div class="card setup-card">
+                  <div class="step-label"><span>{t('setup.step')}</span>{t('setup.stepLabel')}</div>
+                  <h2>{t('setup.providerTitle')}</h2><p>{t('setup.providerDescription')}</p>
+                  <SettingsForm key="setup" initial={settings} pairs={pairs} busy={Boolean(busy)} setup onSave={saveSettings} />
+                  <div class="import-divider"><span>{t('setup.existing')}</span></div><ImportButton onImport={imported} onError={report} disabled={Boolean(busy)} />
+                </div>
+                <p class="onboarding-note"><Icon name="globe" size={16} />{t('setup.note')}</p>
+              </section>
+                : <>
+                  {page === 'learn' && <>
+                    <div class="page-heading">
+                      <span class="eyebrow">{t('home.eyebrow')}</span><h1>{t(known ? 'home.title' : 'home.newTitle')}</h1><p>{t(known ? 'home.description' : 'home.newDescription')}</p>
+                    </div>
+                    <div class="dashboard-grid">
+                      <section class="card hero-card">
+                        <div class="hero-copy">
+                          <span class="badge">{known ? t('common.levelName', { level, name: proficiency(level) }) : t('home.badge')}</span>
+                          <h2>{t(known ? 'home.heroTitle' : 'home.newHeroTitle')}</h2><p>{t(known ? 'home.heroDescription' : 'home.newHeroDescription')}</p>
+                          {known ? <button class="btn primary" disabled={disabled} onClick={() => available[level] ? void startLesson() : setPage('generate')}>
+                            {t(busy === 'lesson' ? 'home.opening' : available[level] ? 'home.startLesson' : 'home.createLesson')}<Icon name="arrow" />
+                          </button> : <div class="hero-actions">
+                            <button class="btn primary" disabled={disabled} onClick={() => totalExercises ? void startAssessment() : void generate(true)}>
+                              {t(busy ? 'home.preparing' : totalExercises ? 'home.startAssessment' : 'home.generateAssessment')}<Icon name={totalExercises ? 'arrow' : 'spark'} />
+                            </button>
+                            {totalExercises > 0 && activeLevels.length < levels.length && <small>{t('home.partialCheck')}</small>}
+                          </div>}
+                        </div>
+                      </section>
+                      <section class="card progress-card">
+                        <div class="card-title"><Icon name="chart" /><h3>{t('home.progress')}</h3></div>
+                        <div class="current-level">{known ? level : t('common.unknown')}<span>{known ? proficiency(level) : t('home.discover')}</span></div>
+                        <div class="level-steps" aria-label={known ? t('home.proficiency', { level }) : t('home.unassessed')}>
+                          {levels.map(l => <span key={l} class={known && levels.indexOf(l) <= levels.indexOf(level) ? 'filled' : ''}>{l}</span>)}
+                        </div>
+                        <div class="progress-bottom"><div><strong>{stats.lessons}</strong><span>{t('home.sessions')}</span></div><div><strong>{stats.answers ? percent(stats.correct / stats.answers * 100) : t('common.unknown')}</strong><span>{t('home.accuracy')}</span></div></div>
+                      </section>
+                    </div>
+                    <section class="library-section">
+                      <div class="section-heading"><div><span class="eyebrow">{t('home.libraryEyebrow')}</span><h2>{t('home.library')}</h2></div><span class="count-label">{t('home.saved', { count: totalExercises, suffix: Object.values(available).includes(1000) ? '+' : '' })}</span></div>
+                      {activeLevels.length ? <div class="library-grid">
+                        {activeLevels.map(l => <button key={l} class="card level-card" disabled={disabled} onClick={() => known ? void startLesson(l) : void startAssessment()}>
+                          <span class="level-icon">{l}</span><div><h3>{proficiency(l)}</h3><p>{t('home.saved', { count: available[l] || 0, suffix: available[l] === 1000 ? '+' : '' })}</p></div><Icon name="arrow" />
+                        </button>)}
+                      </div> : <div class="card empty-library">
+                        <div class="empty-icon"><Icon name="book" size={28} /></div><div><h3>{t('home.emptyTitle')}</h3><p>{t('home.emptyDescription')}</p></div>
+                        <button class="btn secondary" disabled={Boolean(busy)} onClick={() => setPage('generate')}>{t('home.addExercises')}<Icon name="spark" /></button>
+                      </div>}
+                    </section>
+                    <div class="quiet-note"><Icon name="globe" size={18} /><p>{t('home.note')}</p></div>
+                  </>}
+                  {page === 'generate' && <>
+                    <div class="page-heading"><span class="eyebrow">{t('generation.eyebrow')}</span><h1>{t('generation.title')}</h1><p>{t('generation.description')}</p></div>
+                    <div class="settings-layout">
+                      <section class="card settings-card">
+                        <div class="card-title"><Icon name="spark" /><h2>{t(known ? 'generation.lessonTitle' : 'generation.assessmentTitle')}</h2></div>
+                        <p>{t(known ? 'generation.lessonDescription' : 'generation.assessmentDescription')}</p>
+                        <dl class="generation-details">
+                          <div><dt>{t('generation.language')}</dt><dd>{pairLabel}</dd></div>
+                          <div><dt>{t('generation.provider')}</dt><dd>{settings.provider || t('common.notConfigured')}</dd></div>
+                          <div><dt>{t('generation.level')}</dt><dd>{known ? settings.level === 'auto' ? t('generation.autoLevel', { level }) : settings.level : t('generation.allLevels')}</dd></div>
+                          <div><dt>{t('generation.exercises')}</dt><dd>{known ? settings.count : t('generation.assessmentCount')}</dd></div>
+                          <div><dt>{t('generation.romanization')}</dt><dd>{t(settings.romanize ? 'common.included' : 'common.notIncluded')}</dd></div>
+                        </dl>
+                        <div class="actions"><button class="btn primary" disabled={disabled} onClick={() => void generate(!known)}><Icon name="spark" />{t(busy ? 'generation.generating' : known ? 'generation.generateLesson' : 'generation.generateAssessment')}</button><button class="btn secondary" disabled={Boolean(busy)} onClick={() => setPage('settings')}>{t('common.configure')}</button></div>
+                        {busy === 'generation' && <div class="generation-status" role="status"><span class="spinner" /><span>{generationMessage}<small>{t('generation.statusNote')}</small></span></div>}
+                      </section>
+                      <aside class="card tip-card"><span class="eyebrow">{t('generation.tipEyebrow')}</span><h3>{t('generation.tipTitle')}</h3><p>{t('generation.tipDescription')}</p><div class="divider" /><p>{t('generation.providerNote')}</p>{!known && totalExercises > 0 && <button class="text-button" disabled={Boolean(busy)} onClick={() => void startAssessment()}>{t('generation.useSaved')}</button>}</aside>
+                    </div>
+                  </>}
+                  {page === 'settings' && <>
+                    <div class="page-heading"><span class="eyebrow">{t('settings.eyebrow')}</span><h1>{t('settings.title')}</h1><p>{t('settings.description')}</p></div>
+                    <div class="settings-layout">
+                      <section class="card settings-card"><div class="card-title"><Icon name="settings" /><h2>{t('settings.preferences')}</h2></div><SettingsForm key={formKey} initial={settings} pairs={pairs} busy={disabled} onSave={saveSettings} /></section>
+                      <div class="settings-aside">
+                        <section class="card tip-card"><span class="eyebrow">{t('settings.pairEyebrow')}</span><h3>{pairLabel}</h3><p>{t('settings.pairHelp')}</p></section>
+                        <section class="card tip-card">
+                          <span class="eyebrow">{t('settings.databaseEyebrow')}</span><h3>{t('settings.databaseTitle')}</h3><p>{t('settings.databaseDescription')}</p>
+                          <div class="database-actions"><ImportButton onImport={imported} onError={report} disabled={disabled} /><button class="btn secondary" disabled={disabled} onClick={() => void exportDatabase()}><Icon name="download" />{t(busy === 'export' ? 'database.exporting' : 'database.export')}</button></div>
+                        </section>
+                        {settings.provider && <section class="card tip-card"><h3>{t('settings.disconnect')}</h3><p>{t('settings.disconnectDescription')}</p><button class="text-button" disabled={Boolean(busy)} onClick={() => void disconnect()}>{t('settings.removeProvider')}</button></section>}
+                      </div>
+                    </div>
+                  </>}
+                </>}
       </main>
       <footer class="page-footer"><span>{t('app.footer')}</span><span>{t('app.footerTagline')}</span></footer>
     </div>

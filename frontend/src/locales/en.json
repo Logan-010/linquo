@@ -47,7 +47,7 @@
     "newHeroDescription": "Try a selection of exercises, from everyday basics to more advanced language skills. We’ll use your answers to estimate your level.",
     "opening": "Opening…", "startLesson": "Start a lesson", "createLesson": "Create your next lesson", "preparing": "Preparing…",
     "startAssessment": "Start level check", "generateAssessment": "Generate level check", "partialCheck": "Your check uses the levels in your library. Generate a full check for broader coverage.",
-    "artCaption": "a whole new way to connect.", "progress": "Your progress", "discover": "Ready to discover", "proficiency": "Current proficiency: {{level}}",
+    "progress": "Your progress", "discover": "Ready to discover", "proficiency": "Current proficiency: {{level}}",
     "unassessed": "Level not yet assessed", "sessions": "Sessions completed", "accuracy": "Answer accuracy", "libraryEyebrow": "Ready when you are", "library": "Your offline library",
     "saved_one": "{{count}}{{suffix}} exercise saved", "saved_other": "{{count}}{{suffix}} exercises saved", "emptyTitle": "A little room for possibility.",
     "emptyDescription": "Generate exercises or import a database. Everything you add will be available offline.", "addExercises": "Add exercises", "note": "Learning is a practice, not a race. Make a little space for it."
@@ -84,7 +84,7 @@
   "exercise": {
     "types": { "word_bank_translation": "Word bank translation", "match_pairs": "Match pairs", "fill_blank": "Fill in the blank", "vocabulary_choice": "Vocabulary choice" },
     "answer": "Your answer", "selectedWords": "Selected words", "buildAnswer": "Tap the words to build your answer", "removeWord": "Remove word", "matchingHelp": "Select a left tile, then its match on the right. Select a matched left tile to change it.",
-    "hideHint": "Hide hint", "hint": "Need a hint?", "check": "Check answer", "exit": "Exit lesson", "progress": "Lesson progress", "assessment": "Initial level check", "practice": "Practice lesson",
+    "hideHint": "Hide hint", "hint": "Need a hint?", "dontKnow": "I don’t know", "check": "Check answer", "exit": "Exit lesson", "progress": "Lesson progress", "assessment": "Initial level check", "practice": "Practice lesson",
     "correct": "Nicely done!", "incorrect": "A little more practice", "correctAnswer": "Correct answer:", "seeLevel": "See my level", "finish": "Finish lesson", "retrySave": "Retry saving answer",
     "pauseTitle": "Pause here?", "pauseAssessment": "Your level check will restart next time. Complete it to save your starting level.", "pausePractice": "Your checked answers are saved. You can start another lesson anytime.", "keepLearning": "Keep learning"
   }
