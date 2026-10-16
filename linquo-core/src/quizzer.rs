@@ -9,19 +9,53 @@ use crate::generation::CefrLevel;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Tracks a learner's adaptive CEFR level based on their exercise results.
+fn default_weight() -> i64 {
+    1
+}
+
+/// Tracks a learner's adaptive CEFR level.
 ///
-/// Maintains a running score per CEFR level (correct answers add, incorrect
-/// answers subtract) and derives a current level estimate from those scores.
-#[derive(Serialize, Deserialize, Debug, Default)]
+/// Weight controls how strongly each answer affects the score.
+/// Higher weights allow faster proficiency adjustments.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Quizzer {
     frequency_map: HashMap<CefrLevel, i64>,
+
+    #[serde(default = "default_weight")]
+    weight: i64,
+}
+
+impl Default for Quizzer {
+    fn default() -> Self {
+        Self {
+            frequency_map: HashMap::new(),
+            weight: 1,
+        }
+    }
 }
 
 impl Quizzer {
-    /// Create a new quizzer with no recorded results.
+    /// Create a quizzer with the default weight of 1.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a quizzer with a custom weight.
+    pub fn with_weight(weight: i64) -> Self {
+        Self {
+            weight: weight.max(1),
+            ..Self::default()
+        }
+    }
+
+    /// Change the weight for future answers.
+    pub fn set_weight(&mut self, weight: i64) {
+        self.weight = weight.max(1);
+    }
+
+    /// Get the current weight.
+    pub fn weight(&self) -> i64 {
+        self.weight
     }
 
     /// Return the learner's current estimated CEFR level.
@@ -52,11 +86,13 @@ impl Quizzer {
 
     /// Record a correct answer at the given level.
     pub fn insert_correct(&mut self, level: CefrLevel) {
-        *self.frequency_map.entry(level).or_insert(0) += 1;
+        let score = self.frequency_map.entry(level).or_insert(0);
+        *score = score.saturating_add(self.weight.max(1));
     }
 
     /// Record an incorrect answer at the given level.
     pub fn insert_incorrect(&mut self, level: CefrLevel) {
-        *self.frequency_map.entry(level).or_insert(0) -= 1;
+        let score = self.frequency_map.entry(level).or_insert(0);
+        *score = score.saturating_sub(self.weight.max(1));
     }
 }

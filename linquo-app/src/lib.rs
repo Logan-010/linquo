@@ -1,5 +1,6 @@
 mod db;
 mod generator;
+mod score;
 mod state;
 mod util;
 
@@ -33,7 +34,12 @@ pub fn run() {
             db::fetch_excercises,
             db::fetch_lesson,
             generator::init_generation,
-            generator::generate_lesson
+            generator::generate_lesson,
+            score::load_score,
+            score::save_score,
+            score::correct,
+            score::incorrect,
+            score::score
         ])
         .run(tauri::generate_context!())
         .expect("Error while building tauri application");
