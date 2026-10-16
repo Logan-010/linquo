@@ -1,4 +1,5 @@
 use crate::state::AppState;
+use linquo_core::generation::{CefrLevel, Exercise, Language};
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
@@ -30,4 +31,19 @@ pub async fn kv_rm(app: AppHandle, key: String) -> Result<(), String> {
         .map_err(crate::errstr)?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn fetch_excercises(
+    app: AppHandle,
+    n: u32,
+    source: Language,
+    target: Language,
+    level: CefrLevel,
+) -> Result<Vec<Exercise>, String> {
+    app.state::<AppState>()
+        .db
+        .fetch_exercises(n, level, source, target)
+        .await
+        .map_err(crate::errstr)
 }

@@ -1,11 +1,16 @@
-use linquo_core::db::Database;
+use linquo_core::{db::Database, generation::Generator};
+use tauri::async_runtime::Mutex;
 
 pub struct AppState {
     pub db: Database,
+    pub generator: Mutex<Option<Generator>>,
 }
 
 impl AppState {
     pub fn new(db: Database) -> Self {
-        Self { db }
+        Self {
+            db,
+            generator: Mutex::new(None),
+        }
     }
 }

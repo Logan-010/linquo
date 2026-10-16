@@ -1,4 +1,5 @@
 mod db;
+mod generator;
 mod state;
 mod util;
 
@@ -25,7 +26,14 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![db::kv_get, db::kv_put, db::kv_rm])
+        .invoke_handler(tauri::generate_handler![
+            db::kv_get,
+            db::kv_put,
+            db::kv_rm,
+            db::fetch_excercises,
+            generator::init_generation,
+            generator::generate_lesson
+        ])
         .run(tauri::generate_context!())
-        .expect("error while building tauri application");
+        .expect("Error while building tauri application");
 }
