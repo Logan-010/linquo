@@ -25,6 +25,9 @@ pub enum Error {
     /// The input is invalid
     #[error("Invalid input: {0}")]
     InvalidInput(String),
+    /// The model returned a lesson that cannot be graded safely.
+    #[error("Generated lesson is invalid: {0}")]
+    InvalidOutput(String),
 }
 
 /// A language supported by Linquo.
@@ -40,14 +43,26 @@ pub enum Language {
 #[folder = "prompts"]
 struct Prompts;
 
+const LANGUAGE_PAIRS: &[(Language, Language, &str)] = &[(
+    Language::English,
+    Language::Korean,
+    "english_learning_korean.txt",
+)];
+
 impl Language {
+    /// Supported native/learning pairs, shared with the frontend.
+    pub fn supported_pairs() -> Vec<(Self, Self)> {
+        LANGUAGE_PAIRS
+            .iter()
+            .map(|(source, target, _)| (*source, *target))
+            .collect()
+    }
     /// Return the system prompt for the given native/learning pair, or
     /// `None` if that pair is not supported yet.
     pub fn system_prompt(native: Language, learning: Language) -> Option<String> {
-        let file_path = match (native, learning) {
-            (Language::English, Language::Korean) => "english_learning_korean.txt",
-            _ => return None,
-        };
+        let (_, _, file_path) = LANGUAGE_PAIRS
+            .iter()
+            .find(|(source, target, _)| *source == native && *target == learning)?;
 
         Some(
             Prompts::get(file_path)

@@ -1,0 +1,91 @@
+{
+  "app": {
+    "name": "Linquo", "wordmark": "linquo", "home": "Linquo home",
+    "tagline": "A little, every day.", "navigation": "Main navigation",
+    "offline": "Offline", "offlineNotice": "You’re offline", "offlineFirst": "Offline-first learning",
+    "local": "Saved on your device", "sidebarNote": "Your lessons stay with you. Learn anywhere, at your pace.",
+    "version": "LINQUO / {{version}}", "from": "from {{language}}", "pair": "{{source}} → {{target}}",
+    "previewTitle": "Welcome to Linquo’s web preview.", "previewBody": "Open the Tauri desktop or mobile app to save your provider, manage your database, and learn from local lessons.",
+    "opening": "Opening your learning space…", "footer": "Made for the way you learn.", "footerTagline": "Little by little, Linquo.",
+    "description": "Learn at your own pace with personalized lessons, saved on your device for offline practice."
+  },
+  "nav": { "learn": "Learn", "generate": "Generate", "settings": "Settings" },
+  "common": {
+    "dismissError": "Dismiss error", "retry": "Try again", "cancel": "Cancel", "saving": "Saving…", "save": "Save settings",
+    "continue": "Continue", "configure": "Configure", "notConfigured": "Not configured", "included": "Included", "notIncluded": "Not included",
+    "unknown": "—", "percent": "{{value}}%", "fraction": "{{current}} / {{total}}", "levelName": "{{level}} · {{name}}"
+  },
+  "languages": { "English": "English", "Korean": "Korean" },
+  "levels": { "A1": "Beginner", "A2": "Elementary", "B1": "Intermediate", "B2": "Upper intermediate", "C1": "Advanced", "C2": "Proficient" },
+  "errors": {
+    "nativeRequired": "Open Linquo in the desktop or mobile app to access your local database.",
+    "providerFormat": "Enter a provider and model separated by a colon, for example ollama:llama3.2.",
+    "emptyLibrary": "Your library is empty. Generate a level check or import a database to get started.",
+    "noLesson": "No saved {{level}} lessons yet. Generate a lesson to add one to your offline library.",
+    "providerRequired": "Add a provider in settings to generate new exercises.",
+    "databaseSize": "The database must be smaller than 100 MB.",
+    "unsupportedPair": "Choose a language pair supported by this version of Linquo."
+  },
+  "notices": {
+    "settingsSaved": "Settings saved on this device.", "imported": "Database imported. Your learning is ready on this device.",
+    "assessmentReady": "Your level check is saved and ready. You can take it offline.",
+    "generated_one": "{{count}} new {{level}} exercise saved for offline practice.", "generated_other": "{{count}} new {{level}} exercises saved for offline practice.",
+    "disconnected": "Provider settings removed.", "exported": "Database exported to {{path}}."
+  },
+  "busy": { "connecting": "Connecting to your provider…", "assessment": "Preparing your level check · {{level}} ({{current}}/{{total}})…", "generating": "Creating {{count}} exercises at {{level}}…", "exporting": "Exporting your database…" },
+  "setup": {
+    "eyebrow": "Your next chapter starts here", "title": "A language. A little closer.",
+    "description": "Make language learning part of your everyday. Connect a model to create your lessons, then learn at your own pace—even offline.",
+    "step": "01", "stepLabel": "Set up your learning space", "providerTitle": "Bring your own intelligence.",
+    "providerDescription": "Choose the provider and model that will create your exercises.", "existing": "Already have a Linquo database?", "note": "Your data. Your model. Your pace."
+  },
+  "home": {
+    "eyebrow": "Your daily dose of discovery", "title": "Small steps. New worlds.", "newTitle": "Let’s find your starting point.",
+    "description": "A few minutes of practice. A little more confidence.", "newDescription": "A short level check helps your lessons meet you where you are.",
+    "badge": "Made for your level", "heroTitle": "Keep your language skills growing.", "newHeroTitle": "Every journey starts somewhere.",
+    "heroDescription": "Practice with the exercises in your library. No connection needed, just a little curiosity.",
+    "newHeroDescription": "Try a selection of exercises, from everyday basics to more advanced language skills. We’ll use your answers to estimate your level.",
+    "opening": "Opening…", "startLesson": "Start a lesson", "createLesson": "Create your next lesson", "preparing": "Preparing…",
+    "startAssessment": "Start level check", "generateAssessment": "Generate level check", "partialCheck": "Your check uses the levels in your library. Generate a full check for broader coverage.",
+    "artCaption": "a whole new way to connect.", "progress": "Your progress", "discover": "Ready to discover", "proficiency": "Current proficiency: {{level}}",
+    "unassessed": "Level not yet assessed", "sessions": "Sessions completed", "accuracy": "Answer accuracy", "libraryEyebrow": "Ready when you are", "library": "Your offline library",
+    "saved_one": "{{count}}{{suffix}} exercise saved", "saved_other": "{{count}}{{suffix}} exercises saved", "emptyTitle": "A little room for possibility.",
+    "emptyDescription": "Generate exercises or import a database. Everything you add will be available offline.", "addExercises": "Add exercises", "note": "Learning is a practice, not a race. Make a little space for it."
+  },
+  "summary": {
+    "assessmentEyebrow": "A starting point, not a limit", "eyebrow": "One step further", "assessmentTitle": "Your starting level is {{level}}", "title": "A little practice. Real progress.",
+    "assessmentDescription": "{{proficiency}} in {{language}}. Your lessons can now follow your proficiency.", "description": "Your answers have been saved. Come back whenever you’re ready for a little more.",
+    "correct": "Correct answers", "accuracy": "Accuracy", "level": "Current level", "back": "Back to learning"
+  },
+  "generation": {
+    "eyebrow": "Create now. Learn anywhere.", "title": "A fresh page of possibilities.", "description": "Let your model prepare new exercises. They’re saved to your library automatically.",
+    "lessonTitle": "Create a lesson", "assessmentTitle": "Prepare your level check", "lessonDescription": "Fine-tune your next lesson in settings, or generate using your saved preferences.",
+    "assessmentDescription": "We’ll create two exercises at each CEFR level, A1 to C2. This uses up to six generation calls. Saved levels are reused when you retry.",
+    "language": "Language pair", "provider": "Provider", "level": "Level", "exercises": "Exercises", "romanization": "Romanization", "autoLevel": "{{level}} · matches your proficiency",
+    "allLevels": "A1 through C2", "assessmentCount": "12 · 2 per level", "generating": "Generating…", "generateLesson": "Generate lesson", "generateAssessment": "Generate level check",
+    "statusNote": "You can practice without a connection after this finishes.", "tipEyebrow": "A library that’s yours", "tipTitle": "Generate a little ahead.",
+    "tipDescription": "Prepare a few lessons before a trip, your commute, or a quiet moment away from the internet.", "providerNote": "Generation uses your configured provider. Local models work with your own running server.", "useSaved": "Use my saved exercises →"
+  },
+  "settings": {
+    "eyebrow": "Make yourself at home", "title": "Your learning, your way.", "description": "A few preferences to make your practice feel right.",
+    "preferences": "Provider & lesson preferences", "languagePair": "Language pair", "pairHelp": "Available language pairs are provided by the app. Progress and lessons are tracked separately for each pair.",
+    "provider": "Provider & model", "providerPlaceholder": "openai:gpt-4o-mini", "providerHelp": "Use a provider:model reference, such as openai:gpt-4o-mini or ollama:llama3.2.",
+    "apiKey": "API key", "localKeyOptional": "(optional for local models)", "envKeyOptional": "(optional if configured in your environment)", "optional": "Optional", "keyPlaceholder": "Your provider API key",
+    "baseUrl": "Base URL", "baseUrlHelp": "The address of your running {{provider}} server.", "ollamaUrl": "http://localhost:11434", "llamacppUrl": "http://localhost:8080/v1",
+    "count": "Exercises per lesson", "countHelp": "Between 1 and 30 exercises.", "level": "Generation level", "autoLevel": "Match my proficiency", "romanization": "Show romanization",
+    "romanizationHelp": "Reading support alongside learning-language text, where available.", "storageNote": "Saved on this device in your app database, including the API key.", "saveContinue": "Save & continue",
+    "pairEyebrow": "Your language pair", "databaseEyebrow": "Take your learning with you", "databaseTitle": "Your database", "databaseDescription": "Import an existing Linquo database, or export a complete snapshot of your lessons, settings, and progress to your device. The export location is shown when it finishes.",
+    "disconnect": "Disconnect provider", "disconnectDescription": "Remove the saved provider and API key from this device.", "removeProvider": "Remove provider"
+  },
+  "database": {
+    "import": "Import database", "export": "Export database", "exporting": "Exporting…", "importEyebrow": "Bring your learning with you", "replaceTitle": "Replace this database?",
+    "replaceDescription": "Importing {{filename}} replaces your current lessons, progress, and settings with those in the file.", "importing": "Importing…", "replace": "Replace & import"
+  },
+  "exercise": {
+    "types": { "word_bank_translation": "Word bank translation", "match_pairs": "Match pairs", "fill_blank": "Fill in the blank", "vocabulary_choice": "Vocabulary choice" },
+    "answer": "Your answer", "selectedWords": "Selected words", "buildAnswer": "Tap the words to build your answer", "removeWord": "Remove word", "matchingHelp": "Select a left tile, then its match on the right. Select a matched left tile to change it.",
+    "hideHint": "Hide hint", "hint": "Need a hint?", "check": "Check answer", "exit": "Exit lesson", "progress": "Lesson progress", "assessment": "Initial level check", "practice": "Practice lesson",
+    "correct": "Nicely done!", "incorrect": "A little more practice", "correctAnswer": "Correct answer:", "seeLevel": "See my level", "finish": "Finish lesson", "retrySave": "Retry saving answer",
+    "pauseTitle": "Pause here?", "pauseAssessment": "Your level check will restart next time. Complete it to save your starting level.", "pausePractice": "Your checked answers are saved. You can start another lesson anytime.", "keepLearning": "Keep learning"
+  }
+}

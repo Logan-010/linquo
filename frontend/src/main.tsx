@@ -1,57 +1,89 @@
 import { render } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { defaults, get, initialize, invoke, isTauri, levels, pair, parseSettings, put, scoreKey, type Lesson, type Level, type Settings } from './api';
+import {
+  defaultPair, defaults, get, initialize, invoke, isTauri, languageName, levels,
+  parseSettings, put, scoreKey, statsKey, type LanguagePair, type Lesson, type Level, type Settings,
+} from './api';
 import { Icon, ImportButton, SettingsForm } from './components';
 import { ExerciseSession, type SessionItem } from './ExerciseSession';
+import { useTranslation } from './i18n';
+import appIcon from '../../linquo-app/icons/icon.png';
 import './style.css';
 
 const settingsKey = 'linquo-settings-v1';
-const statsKey = 'linquo-stats-English-Korean-v1';
-const levelNames: Record<Level, string> = { A1: 'Beginner', A2: 'Elementary', B1: 'Intermediate', B2: 'Upper intermediate', C1: 'Advanced', C2: 'Proficient' };
 interface Stats { lessons: number; answers: number; correct: number }
 interface Session { items: SessionItem[]; assessment: boolean }
 type Page = 'learn' | 'generate' | 'settings';
+type Busy = '' | 'settings' | 'assessment' | 'lesson' | 'generation' | 'disconnect' | 'export';
 
 function App() {
+  const { t, language } = useTranslation();
   const [ready, setReady] = useState(false);
   const [settings, setSettings] = useState<Settings>(defaults);
+  const [pairs, setPairs] = useState<LanguagePair[]>([defaultPair]);
   const [stats, setStats] = useState<Stats>({ lessons: 0, answers: 0, correct: 0 });
   const [known, setKnown] = useState(false);
   const [level, setLevel] = useState<Level>('A1');
   const [available, setAvailable] = useState<Partial<Record<Level, number>>>({});
   const [page, setPage] = useState<Page>('learn');
-  const [busy, setBusy] = useState('');
+  const [busy, setBusy] = useState<Busy>('');
+  const [generationStatus, setGenerationStatus] = useState<{ key: 'busy.connecting' | 'busy.assessment' | 'busy.generating'; values?: Record<string, string | number> }>({ key: 'busy.connecting' });
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [session, setSession] = useState<Session | null>(null);
   const [summary, setSummary] = useState<{ correct: number; total: number; assessment: boolean; level: Level } | null>(null);
   const [offline, setOffline] = useState(!navigator.onLine);
+  const pair: LanguagePair = { source: settings.source, target: settings.target };
+  const pairLabel = t('app.pair', { source: languageName(pair.source), target: languageName(pair.target) });
+  const proficiency = (value: Level) => t(`levels.${value}`);
+  const percent = (value: number) => t('common.percent', { value: Math.round(value) });
 
   function report(error: unknown) { setError(error instanceof Error ? error.message : String(error)); }
-  async function refreshLibrary() {
+  async function refreshLibrary(activePair = pair) {
     const counts = await Promise.all(levels.map(async level => {
-      const exercises = await invoke<SessionItem['exercise'][]>('fetch_excercises', { ...pair, level, n: 1000 });
+      const exercises = await invoke<SessionItem['exercise'][]>('fetch_excercises', { ...activePair, level, n: 1000 });
       return [level, exercises.length] as const;
     }));
-    const result = Object.fromEntries(counts);
-    setAvailable(result);
-    return result;
+    setAvailable(Object.fromEntries(counts));
   }
-  async function boot() {
-    setError('');
-    const [storedSettings, score, storedStats] = await Promise.all([get(settingsKey), get(scoreKey), get(statsKey)]);
-    setSettings(parseSettings(storedSettings));
+  async function loadPair(activePair: LanguagePair) {
+    const [score, storedStats] = await Promise.all([get(scoreKey(activePair)), get(statsKey(activePair))]);
     setKnown(Boolean(score));
-    if (score) setLevel(await invoke<Level>('load_score', { ...pair, quiz: false }));
-    else setLevel('A1');
+    setLevel(score ? await invoke<Level>('load_score', { ...activePair, quiz: false }) : 'A1');
     if (storedStats) {
       const data = JSON.parse(storedStats);
       setStats({ lessons: Math.max(0, Number(data.lessons) || 0), answers: Math.max(0, Number(data.answers) || 0), correct: Math.max(0, Number(data.correct) || 0) });
     } else setStats({ lessons: 0, answers: 0, correct: 0 });
-    await refreshLibrary();
+    await refreshLibrary(activePair);
+  }
+  async function boot() {
+    setError('');
+    const [storedSettings, supported] = await Promise.all([
+      get(settingsKey), invoke<[string, string][]>('supported_language_pairs'),
+    ]);
+    if (!supported.length) throw new Error(t('errors.unsupportedPair'));
+    const nextPairs = supported.map(([source, target]) => ({ source, target }));
+    const next = parseSettings(storedSettings);
+    if (!nextPairs.some(p => p.source === next.source && p.target === next.target)) Object.assign(next, nextPairs[0]);
+    setPairs(nextPairs);
+    setSettings(next);
+    await loadPair(next);
     setReady(true);
   }
   useEffect(() => { if (isTauri()) void boot().catch(report); else setReady(true); }, []);
+  useEffect(() => {
+    const favicon = document.createElement('link');
+    favicon.rel = 'icon';
+    favicon.type = 'image/png';
+    favicon.href = appIcon;
+    document.head.append(favicon);
+    return () => favicon.remove();
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.title = t('app.name');
+    document.querySelector('meta[name="description"]')?.setAttribute('content', t('app.description'));
+  }, [language]);
   useEffect(() => {
     const update = () => setOffline(!navigator.onLine);
     window.addEventListener('online', update); window.addEventListener('offline', update);
@@ -61,27 +93,47 @@ function App() {
   async function saveSettings(next: Settings) {
     setBusy('settings'); setError(''); setNotice('');
     try {
-      if (!/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?:\S+$/i.test(next.provider.trim())) throw new Error('Enter a provider and model separated by a colon, for example ollama:llama3.2.');
+      if (!/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?:\S+$/i.test(next.provider.trim())) throw new Error(t('errors.providerFormat'));
+      if (!pairs.some(p => p.source === next.source && p.target === next.target)) throw new Error(t('errors.unsupportedPair'));
       await put(settingsKey, next);
-      setSettings(next); setNotice('Settings saved on this device.');
+      if (next.source !== pair.source || next.target !== pair.target) await loadPair(next);
+      setSettings(next);
+      setNotice(t('notices.settingsSaved'));
     } catch (error) { report(error); }
     finally { setBusy(''); }
   }
   async function imported() {
-    setSummary(null); setSession(null); setPage('learn'); setNotice('Database imported. Your learning is ready on this device.');
+    setSummary(null); setSession(null); setPage('learn');
     await boot();
+    setNotice(t('notices.imported'));
+  }
+  async function exportDatabase() {
+    setBusy('export'); setError(''); setNotice('');
+    try {
+      const path = await invoke<string>('export_database');
+      setNotice(t('notices.exported', { path }));
+    } catch (error) { report(error); }
+    finally { setBusy(''); }
+  }
+  async function disconnect() {
+    setBusy('disconnect'); setError(''); setNotice('');
+    try {
+      const next = { ...settings, provider: '', credentials: '', baseUrl: '' };
+      await put(settingsKey, next);
+      setSettings(next); setNotice(t('notices.disconnected'));
+    } catch (error) { report(error); }
+    finally { setBusy(''); }
   }
   async function startAssessment() {
     setBusy('assessment'); setError(''); setNotice('');
     try {
-      // Check the real score key, including scores from imported databases.
-      if (await get(scoreKey)) { await boot(); return; }
+      if (await get(scoreKey(pair))) { await boot(); return; }
       const groups = await Promise.all(levels.map(async level => {
         const exercises = await invoke<SessionItem['exercise'][]>('fetch_excercises', { ...pair, level, n: 2 });
         return exercises.map(exercise => ({ exercise, level }));
       }));
       const items = groups.flat();
-      if (!items.length) throw new Error('Your library is empty. Generate a level check or import a database to get started.');
+      if (!items.length) throw new Error(t('errors.emptyLibrary'));
       await invoke('load_score', { ...pair, quiz: true });
       setSession({ items, assessment: true }); setSummary(null);
     } catch (error) { report(error); }
@@ -92,32 +144,32 @@ function App() {
     try {
       await invoke('load_score', { ...pair, quiz: false });
       const lesson = await invoke<Lesson | null>('fetch_lesson', { ...pair, level: practiceLevel });
-      if (!lesson?.exercises.length) throw new Error(`No saved ${practiceLevel} lessons yet. Generate a lesson to add one to your offline library.`);
-      setSession({ items: lesson.exercises.map(exercise => ({ exercise, level: lesson.learning_level })), assessment: false }); setSummary(null);
+      if (!lesson?.exercises.length) throw new Error(t('errors.noLesson', { level: practiceLevel }));
+      setSession({ items: lesson.exercises.map(exercise => ({ exercise, level: lesson.learning_level })), assessment: false });
+      setSummary(null);
     } catch (error) { report(error); }
     finally { setBusy(''); }
   }
   async function generate(assessment: boolean) {
-    setBusy('Connecting to your provider…'); setError(''); setNotice('');
+    setBusy('generation'); setGenerationStatus({ key: 'busy.connecting' }); setError(''); setNotice('');
     try {
-      if (!settings.provider.trim()) { setPage('settings'); throw new Error('Add a provider in settings to generate new exercises.'); }
+      if (!settings.provider.trim()) { setPage('settings'); throw new Error(t('errors.providerRequired')); }
       await initialize(settings);
       if (assessment) {
-        // Reuse already-saved levels when retrying an interrupted generation.
         for (const targetLevel of levels) {
           const existing = await invoke<SessionItem['exercise'][]>('fetch_excercises', { ...pair, level: targetLevel, n: 2 });
           if (existing.length >= 2) continue;
-          setBusy(`Preparing your level check · ${targetLevel} (${levels.indexOf(targetLevel) + 1}/6)…`);
+          setGenerationStatus({ key: 'busy.assessment', values: { level: targetLevel, current: levels.indexOf(targetLevel) + 1, total: levels.length } });
           await invoke<Lesson>('generate_lesson', { ...pair, n: 2, romanize: settings.romanize, level: targetLevel });
         }
         await refreshLibrary();
-        setNotice('Your level check is saved and ready. You can take it offline.'); setPage('learn');
+        setNotice(t('notices.assessmentReady')); setPage('learn');
       } else {
         const generationLevel = settings.level === 'auto' ? level : settings.level;
-        setBusy(`Creating ${settings.count} exercises at ${generationLevel}…`);
+        setGenerationStatus({ key: 'busy.generating', values: { count: settings.count, level: generationLevel } });
         const lesson = await invoke<Lesson>('generate_lesson', { ...pair, n: settings.count, romanize: settings.romanize, level: generationLevel });
         await refreshLibrary();
-        setNotice(`${lesson.exercises.length} new ${lesson.learning_level} exercises saved for offline practice.`); setPage('learn');
+        setNotice(t('notices.generated', { count: lesson.exercises.length, level: lesson.learning_level })); setPage('learn');
       }
     } catch (error) { report(error); await refreshLibrary().catch(() => {}); }
     finally { setBusy(''); }
@@ -126,55 +178,155 @@ function App() {
     await invoke('save_score');
     const currentLevel = await invoke<Level | null>('score');
     const nextStats = { lessons: stats.lessons + 1, answers: stats.answers + total, correct: stats.correct + correct };
-    await put(statsKey, nextStats);
+    await put(statsKey(pair), nextStats);
     setStats(nextStats); setKnown(true); setLevel(currentLevel || 'A1');
     setSummary({ correct, total, assessment: session!.assessment, level: currentLevel || 'A1' }); setSession(null);
   }
   const totalExercises = Object.values(available).reduce((sum, count) => sum + (count || 0), 0);
   const setup = ready && isTauri() && !settings.provider && totalExercises === 0;
   const activeLevels = levels.filter(level => (available[level] || 0) > 0);
+  const formKey = JSON.stringify(settings);
+  const disabled = Boolean(busy) || !isTauri();
+  const generationMessage = t(generationStatus.key, generationStatus.values);
 
   return <div class="app-shell">
     <aside class="sidebar">
-      <a href="#" class="brand" onClick={e => { e.preventDefault(); if (!session) { setPage('learn'); setSummary(null); } }} aria-label="Linquo home"><span class="brand-mark"><Icon name="leaf" size={26}/></span>linquo<span class="brand-dot">.</span></a>
-      <span class="sidebar-label">A little, every day.</span>
-      <nav aria-label="Main navigation">{([{ id: 'learn', icon: 'book', label: 'Learn' }, { id: 'generate', icon: 'spark', label: 'Generate' }, { id: 'settings', icon: 'settings', label: 'Settings' }] as const).map(item => <button key={item.id} disabled={Boolean(session) || Boolean(busy)} class={`nav-item ${page === item.id ? 'active' : ''}`} aria-current={page === item.id ? 'page' : undefined} onClick={() => { setPage(item.id); setSummary(null); setNotice(''); setError(''); }}><Icon name={item.icon}/><span>{item.label}</span>{item.id === 'generate' && <span class="nav-plus">+</span>}</button>)}</nav>
-      <div class="sidebar-footer"><div class="offline-mark"><span/>{offline ? 'You’re offline' : 'Offline-first learning'}</div><p>Your lessons stay with you.<br/>Learn anywhere, at your pace.</p><span class="version">LINQUO / 0.1</span></div>
+      <a href="#" class="brand" onClick={e => { e.preventDefault(); if (!session && !busy) { setPage('learn'); setSummary(null); } }} aria-label={t('app.home')}>
+        <img class="brand-mark" src={appIcon} alt="" width={32} height={32}/>{t('app.wordmark')}<span class="brand-dot">.</span>
+      </a>
+      <span class="sidebar-label">{t('app.tagline')}</span>
+      <nav aria-label={t('app.navigation')}>
+        {([{ id: 'learn', icon: 'book' }, { id: 'generate', icon: 'spark' }, { id: 'settings', icon: 'settings' }] as const).map(item =>
+          <button key={item.id} disabled={Boolean(session) || Boolean(busy)} class={`nav-item ${page === item.id ? 'active' : ''}`} aria-current={page === item.id ? 'page' : undefined} onClick={() => { setPage(item.id); setSummary(null); setNotice(''); setError(''); }}>
+            <Icon name={item.icon}/><span>{t(`nav.${item.id}`)}</span>{item.id === 'generate' && <span class="nav-plus" aria-hidden="true">+</span>}
+          </button>,
+        )}
+      </nav>
+      <div class="sidebar-footer">
+        <div class="offline-mark"><span/>{t(offline ? 'app.offlineNotice' : 'app.offlineFirst')}</div>
+        <p>{t('app.sidebarNote')}</p><span class="version">{t('app.version', { version: '0.1' })}</span>
+      </div>
     </aside>
     <div class="main-shell">
-      <header class="topbar"><div class="language-pill"><span class="korean-flag" aria-hidden="true">🇰🇷</span><span>Korean <span class="muted">from English</span></span><Icon name="globe" size={16}/></div><span class="device-status"><span class="status-dot"/>{offline ? 'Offline' : 'Saved on your device'}</span></header>
+      <header class="topbar">
+        <div class="language-pill"><Icon name="globe"/><span>{languageName(pair.target)} <span class="muted">{t('app.from', { language: languageName(pair.source) })}</span></span></div>
+        <span class="device-status"><span class="status-dot"/>{t(offline ? 'app.offline' : 'app.local')}</span>
+      </header>
       <main id="main-content">
-        {!isTauri() && <div class="notice" role="status"><strong>Welcome to Linquo’s web preview.</strong> Open the Tauri desktop or mobile app to save your provider, import a database, and learn from local lessons.</div>}
-        {error && <div class="notice error" role="alert"><span>{error}</span><button class="icon-button" aria-label="Dismiss error" onClick={() => setError('')}><Icon name="close" size={16}/></button></div>}
+        {!isTauri() && <div class="notice" role="status"><strong>{t('app.previewTitle')}</strong> {t('app.previewBody')}</div>}
+        {error && <div class="notice error" role="alert"><span>{error}</span><button class="icon-button" aria-label={t('common.dismissError')} onClick={() => setError('')}><Icon name="close" size={16}/></button></div>}
         {notice && <div class="notice success" role="status"><Icon name="check"/><span>{notice}</span></div>}
-        {busy && page !== 'generate' && busy !== 'settings' && busy !== 'lesson' && busy !== 'assessment' && busy !== 'disconnect' && <div class="notice" role="status"><span class="spinner"/>{busy}</div>}
-        {!ready ? <div class="loading-state"><span class="spinner"/><h2>Opening your learning space…</h2>{error && <div class="actions"><button class="btn secondary" onClick={() => void boot().catch(report)}>Try again</button><ImportButton onImport={imported} onError={report}/></div>}</div>
-        : session ? <ExerciseSession items={session.items} assessment={session.assessment} romanize={settings.romanize} onFinish={finish} onExit={() => { setSession(null); if (known) void invoke<Level>('load_score', { ...pair, quiz: false }).then(setLevel).catch(report); }}/>
-        : summary ? <section class="card summary"><span class="summary-icon"><Icon name={summary.assessment ? 'chart' : 'check'} size={40}/></span><span class="eyebrow">{summary.assessment ? 'A starting point, not a limit' : 'One step further'}</span><h1>{summary.assessment ? `Your starting level is ${summary.level}` : 'A little practice. Real progress.'}</h1><p>{summary.assessment ? `${levelNames[summary.level]} Korean. Your lessons can now follow your proficiency.` : 'Your answers have been saved. Come back whenever you’re ready for a little more.'}</p><div class="summary-stats"><div><strong>{summary.correct}/{summary.total}</strong><span>Correct answers</span></div><div><strong>{Math.round(summary.correct / summary.total * 100)}%</strong><span>Accuracy</span></div><div><strong>{summary.level}</strong><span>Current level</span></div></div><button class="btn primary" onClick={() => { setSummary(null); setPage('learn'); }}>Back to learning<Icon name="arrow"/></button></section>
-        : setup ? <section class="onboarding"><div class="page-heading"><span class="eyebrow">YOUR NEXT CHAPTER STARTS HERE</span><h1>A language.<br/>A little closer.</h1><p>Make Korean part of your everyday. Connect a model to create your lessons, then learn at your own pace—even offline.</p></div><div class="card setup-card"><div class="step-label"><span>01</span>Set up your learning space</div><h2>Bring your own intelligence.</h2><p>Choose the provider and model that will create your exercises.</p><SettingsForm key="setup" initial={settings} busy={Boolean(busy)} setup onSave={saveSettings}/><div class="import-divider"><span>Already have a Linquo database?</span></div><ImportButton onImport={imported} onError={report} disabled={Boolean(busy)}/></div><p class="onboarding-note"><Icon name="leaf" size={16}/>Your data. Your model. Your pace.</p></section>
+        {busy === 'generation' && page !== 'generate' && <div class="notice" role="status"><span class="spinner"/>{generationMessage}</div>}
+        {busy === 'export' && <div class="notice" role="status"><span class="spinner"/>{t('busy.exporting')}</div>}
+        {!ready ? <div class="loading-state">
+          <span class="spinner"/><h2>{t('app.opening')}</h2>
+          {error && <div class="actions"><button class="btn secondary" onClick={() => void boot().catch(report)}>{t('common.retry')}</button><ImportButton onImport={imported} onError={report}/></div>}
+        </div>
+        : session ? <ExerciseSession items={session.items} assessment={session.assessment} romanize={settings.romanize} onFinish={finish} onExit={() => {
+          setSession(null);
+          if (known) void invoke<Level>('load_score', { ...pair, quiz: false }).then(setLevel).catch(report);
+        }}/>
+        : summary ? <section class="card summary">
+          <span class="summary-icon"><Icon name={summary.assessment ? 'chart' : 'check'} size={40}/></span>
+          <span class="eyebrow">{t(summary.assessment ? 'summary.assessmentEyebrow' : 'summary.eyebrow')}</span>
+          <h1>{summary.assessment ? t('summary.assessmentTitle', { level: summary.level }) : t('summary.title')}</h1>
+          <p>{summary.assessment ? t('summary.assessmentDescription', { proficiency: proficiency(summary.level), language: languageName(pair.target) }) : t('summary.description')}</p>
+          <div class="summary-stats">
+            <div><strong>{t('common.fraction', { current: summary.correct, total: summary.total })}</strong><span>{t('summary.correct')}</span></div>
+            <div><strong>{percent(summary.correct / summary.total * 100)}</strong><span>{t('summary.accuracy')}</span></div>
+            <div><strong>{summary.level}</strong><span>{t('summary.level')}</span></div>
+          </div>
+          <button class="btn primary" onClick={() => { setSummary(null); setPage('learn'); }}>{t('summary.back')}<Icon name="arrow"/></button>
+        </section>
+        : setup ? <section class="onboarding">
+          <div class="page-heading"><span class="eyebrow">{t('setup.eyebrow')}</span><h1>{t('setup.title')}</h1><p>{t('setup.description')}</p></div>
+          <div class="card setup-card">
+            <div class="step-label"><span>{t('setup.step')}</span>{t('setup.stepLabel')}</div>
+            <h2>{t('setup.providerTitle')}</h2><p>{t('setup.providerDescription')}</p>
+            <SettingsForm key="setup" initial={settings} pairs={pairs} busy={Boolean(busy)} setup onSave={saveSettings}/>
+            <div class="import-divider"><span>{t('setup.existing')}</span></div><ImportButton onImport={imported} onError={report} disabled={Boolean(busy)}/>
+          </div>
+          <p class="onboarding-note"><Icon name="globe" size={16}/>{t('setup.note')}</p>
+        </section>
         : <>
           {page === 'learn' && <>
-            <div class="page-heading"><span class="eyebrow">YOUR DAILY DOSE OF DISCOVERY</span><h1>{known ? 'Small steps. New worlds.' : 'Let’s find your starting point.'}</h1><p>{known ? 'A few minutes of Korean. A little more confidence.' : 'A short level check helps your lessons meet you where you are.'}</p></div>
-            <div class="dashboard-grid"><section class="card hero-card"><div class="hero-copy"><span class="badge">{known ? `${level} · ${levelNames[level]}` : 'MADE FOR YOUR LEVEL'}</span><h2>{known ? 'Keep your Korean growing.' : 'Every journey starts somewhere.'}</h2><p>{known ? 'Practice with the exercises in your library. No connection needed, just a little curiosity.' : 'Try a selection of exercises, from everyday basics to more advanced Korean. We’ll use your answers to estimate your level.'}</p>
-              {known ? <button class="btn primary" disabled={Boolean(busy) || !isTauri()} onClick={() => available[level] ? void startLesson() : setPage('generate')}>{busy === 'lesson' ? 'Opening…' : available[level] ? 'Start a lesson' : 'Create your next lesson'}<Icon name="arrow"/></button> : <div class="hero-actions"><button class="btn primary" disabled={Boolean(busy) || !isTauri()} onClick={() => totalExercises ? void startAssessment() : void generate(true)}>{busy ? 'Preparing…' : totalExercises ? 'Start level check' : 'Generate level check'}<Icon name={totalExercises ? 'arrow' : 'spark'}/></button>{totalExercises > 0 && activeLevels.length < 6 && <small>Your check uses the levels in your library. Generate a full check for broader coverage.</small>}</div>}
-            </div><div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"/><div class="orbit orbit-two"/><span class="hangul hangul-one">한</span><span class="hangul hangul-two">글</span><span class="art-dot dot-one"/><span class="art-dot dot-two"/><span class="art-caption">a whole new way to say hello.</span></div></section>
-              <section class="card progress-card"><div class="card-title"><Icon name="chart"/><h3>Your progress</h3></div><div class="current-level">{known ? level : '—'}<span>{known ? levelNames[level] : 'Ready to discover'}</span></div><div class="level-steps" aria-label={known ? `Current proficiency: ${level}` : 'Level not yet assessed'}>{levels.map(l => <span key={l} class={known && levels.indexOf(l) <= levels.indexOf(level) ? 'filled' : ''}>{l}</span>)}</div><div class="progress-bottom"><div><strong>{stats.lessons}</strong><span>Sessions completed</span></div><div><strong>{stats.answers ? `${Math.round(stats.correct / stats.answers * 100)}%` : '—'}</strong><span>Answer accuracy</span></div></div></section>
+            <div class="page-heading">
+              <span class="eyebrow">{t('home.eyebrow')}</span><h1>{t(known ? 'home.title' : 'home.newTitle')}</h1><p>{t(known ? 'home.description' : 'home.newDescription')}</p>
             </div>
-            <section class="library-section"><div class="section-heading"><div><span class="eyebrow">READY WHEN YOU ARE</span><h2>Your offline library</h2></div><span class="count-label">{totalExercises}{totalExercises >= 1000 ? '+' : ''} exercises saved</span></div>
-              {activeLevels.length ? <div class="library-grid">{activeLevels.map(l => <button key={l} class="card level-card" disabled={Boolean(busy) || !isTauri()} onClick={() => known ? void startLesson(l) : void startAssessment()}><span class="level-icon">{l}</span><div><h3>{levelNames[l]}</h3><p>{available[l]}{available[l] === 1000 ? '+' : ''} saved exercises</p></div><Icon name="arrow"/></button>)}</div> : <div class="card empty-library"><div class="empty-icon"><Icon name="book" size={28}/></div><div><h3>A little room for possibility.</h3><p>Generate exercises or import a database. Everything you add will be available offline.</p></div><button class="btn secondary" disabled={Boolean(busy)} onClick={() => setPage('generate')}>Add exercises<Icon name="spark"/></button></div>}
+            <div class="dashboard-grid">
+              <section class="card hero-card">
+                <div class="hero-copy">
+                  <span class="badge">{known ? t('common.levelName', { level, name: proficiency(level) }) : t('home.badge')}</span>
+                  <h2>{t(known ? 'home.heroTitle' : 'home.newHeroTitle')}</h2><p>{t(known ? 'home.heroDescription' : 'home.newHeroDescription')}</p>
+                  {known ? <button class="btn primary" disabled={disabled} onClick={() => available[level] ? void startLesson() : setPage('generate')}>
+                    {t(busy === 'lesson' ? 'home.opening' : available[level] ? 'home.startLesson' : 'home.createLesson')}<Icon name="arrow"/>
+                  </button> : <div class="hero-actions">
+                    <button class="btn primary" disabled={disabled} onClick={() => totalExercises ? void startAssessment() : void generate(true)}>
+                      {t(busy ? 'home.preparing' : totalExercises ? 'home.startAssessment' : 'home.generateAssessment')}<Icon name={totalExercises ? 'arrow' : 'spark'}/>
+                    </button>
+                    {totalExercises > 0 && activeLevels.length < levels.length && <small>{t('home.partialCheck')}</small>}
+                  </div>}
+                </div>
+                <div class="hero-art" aria-hidden="true"><div class="orbit orbit-one"/><div class="orbit orbit-two"/><span class="art-symbol symbol-one"><Icon name="globe" size={74}/></span><span class="art-symbol symbol-two"><Icon name="spark" size={56}/></span><span class="art-dot dot-one"/><span class="art-dot dot-two"/><span class="art-caption">{t('home.artCaption')}</span></div>
+              </section>
+              <section class="card progress-card">
+                <div class="card-title"><Icon name="chart"/><h3>{t('home.progress')}</h3></div>
+                <div class="current-level">{known ? level : t('common.unknown')}<span>{known ? proficiency(level) : t('home.discover')}</span></div>
+                <div class="level-steps" aria-label={known ? t('home.proficiency', { level }) : t('home.unassessed')}>
+                  {levels.map(l => <span key={l} class={known && levels.indexOf(l) <= levels.indexOf(level) ? 'filled' : ''}>{l}</span>)}
+                </div>
+                <div class="progress-bottom"><div><strong>{stats.lessons}</strong><span>{t('home.sessions')}</span></div><div><strong>{stats.answers ? percent(stats.correct / stats.answers * 100) : t('common.unknown')}</strong><span>{t('home.accuracy')}</span></div></div>
+              </section>
+            </div>
+            <section class="library-section">
+              <div class="section-heading"><div><span class="eyebrow">{t('home.libraryEyebrow')}</span><h2>{t('home.library')}</h2></div><span class="count-label">{t('home.saved', { count: totalExercises, suffix: Object.values(available).includes(1000) ? '+' : '' })}</span></div>
+              {activeLevels.length ? <div class="library-grid">
+                {activeLevels.map(l => <button key={l} class="card level-card" disabled={disabled} onClick={() => known ? void startLesson(l) : void startAssessment()}>
+                  <span class="level-icon">{l}</span><div><h3>{proficiency(l)}</h3><p>{t('home.saved', { count: available[l] || 0, suffix: available[l] === 1000 ? '+' : '' })}</p></div><Icon name="arrow"/>
+                </button>)}
+              </div> : <div class="card empty-library">
+                <div class="empty-icon"><Icon name="book" size={28}/></div><div><h3>{t('home.emptyTitle')}</h3><p>{t('home.emptyDescription')}</p></div>
+                <button class="btn secondary" disabled={Boolean(busy)} onClick={() => setPage('generate')}>{t('home.addExercises')}<Icon name="spark"/></button>
+              </div>}
             </section>
-            <div class="quiet-note"><Icon name="leaf" size={18}/><p>Learning is a practice, not a race. Make a little space for it.</p></div>
+            <div class="quiet-note"><Icon name="globe" size={18}/><p>{t('home.note')}</p></div>
           </>}
           {page === 'generate' && <>
-            <div class="page-heading"><span class="eyebrow">CREATE NOW. LEARN ANYWHERE.</span><h1>A fresh page of possibilities.</h1><p>Let your model prepare new exercises. They’re saved to your library automatically.</p></div>
-            <div class="settings-layout"><section class="card settings-card"><div class="card-title"><Icon name="spark"/><h2>{known ? 'Create a lesson' : 'Prepare your level check'}</h2></div><p>{known ? 'Fine-tune your next lesson in settings, or generate using your saved preferences.' : 'We’ll create two exercises at each CEFR level, A1 to C2. This uses up to six generation calls. Saved levels are reused when you retry.'}</p><dl class="generation-details"><div><dt>Language</dt><dd>English → Korean</dd></div><div><dt>Provider</dt><dd>{settings.provider || 'Not configured'}</dd></div><div><dt>Level</dt><dd>{known ? settings.level === 'auto' ? `${level} · matches your proficiency` : settings.level : 'A1 through C2'}</dd></div><div><dt>Exercises</dt><dd>{known ? settings.count : '12 · 2 per level'}</dd></div><div><dt>Romanization</dt><dd>{settings.romanize ? 'Included' : 'Not included'}</dd></div></dl><div class="actions"><button class="btn primary" disabled={Boolean(busy) || !isTauri()} onClick={() => void generate(!known)}><Icon name="spark"/>{busy ? 'Generating…' : known ? 'Generate lesson' : 'Generate level check'}</button><button class="btn secondary" disabled={Boolean(busy)} onClick={() => setPage('settings')}>Configure</button></div>{busy && <div class="generation-status" role="status"><span class="spinner"/><span>{busy}<small>You can practice without a connection after this finishes.</small></span></div>}</section><aside class="card tip-card"><span class="eyebrow">A LIBRARY THAT’S YOURS</span><h3>Generate a little ahead.</h3><p>Prepare a few lessons before a trip, your commute, or a quiet moment away from the internet.</p><div class="divider"/><p>Generation uses your configured provider. Local models work with your own running server.</p>{!known && totalExercises > 0 && <button class="text-button" disabled={Boolean(busy)} onClick={() => void startAssessment()}>Use my saved exercises →</button>}</aside></div>
+            <div class="page-heading"><span class="eyebrow">{t('generation.eyebrow')}</span><h1>{t('generation.title')}</h1><p>{t('generation.description')}</p></div>
+            <div class="settings-layout">
+              <section class="card settings-card">
+                <div class="card-title"><Icon name="spark"/><h2>{t(known ? 'generation.lessonTitle' : 'generation.assessmentTitle')}</h2></div>
+                <p>{t(known ? 'generation.lessonDescription' : 'generation.assessmentDescription')}</p>
+                <dl class="generation-details">
+                  <div><dt>{t('generation.language')}</dt><dd>{pairLabel}</dd></div>
+                  <div><dt>{t('generation.provider')}</dt><dd>{settings.provider || t('common.notConfigured')}</dd></div>
+                  <div><dt>{t('generation.level')}</dt><dd>{known ? settings.level === 'auto' ? t('generation.autoLevel', { level }) : settings.level : t('generation.allLevels')}</dd></div>
+                  <div><dt>{t('generation.exercises')}</dt><dd>{known ? settings.count : t('generation.assessmentCount')}</dd></div>
+                  <div><dt>{t('generation.romanization')}</dt><dd>{t(settings.romanize ? 'common.included' : 'common.notIncluded')}</dd></div>
+                </dl>
+                <div class="actions"><button class="btn primary" disabled={disabled} onClick={() => void generate(!known)}><Icon name="spark"/>{t(busy ? 'generation.generating' : known ? 'generation.generateLesson' : 'generation.generateAssessment')}</button><button class="btn secondary" disabled={Boolean(busy)} onClick={() => setPage('settings')}>{t('common.configure')}</button></div>
+                {busy === 'generation' && <div class="generation-status" role="status"><span class="spinner"/><span>{generationMessage}<small>{t('generation.statusNote')}</small></span></div>}
+              </section>
+              <aside class="card tip-card"><span class="eyebrow">{t('generation.tipEyebrow')}</span><h3>{t('generation.tipTitle')}</h3><p>{t('generation.tipDescription')}</p><div class="divider"/><p>{t('generation.providerNote')}</p>{!known && totalExercises > 0 && <button class="text-button" disabled={Boolean(busy)} onClick={() => void startAssessment()}>{t('generation.useSaved')}</button>}</aside>
+            </div>
           </>}
           {page === 'settings' && <>
-            <div class="page-heading"><span class="eyebrow">MAKE YOURSELF AT HOME</span><h1>Your learning, your way.</h1><p>A few preferences to make your practice feel right.</p></div><div class="settings-layout"><section class="card settings-card"><div class="card-title"><Icon name="settings"/><h2>Provider & lesson preferences</h2></div><SettingsForm key={settings.provider + settings.count + settings.level + settings.romanize} initial={settings} busy={Boolean(busy) || !isTauri()} onSave={saveSettings}/></section><div class="settings-aside"><section class="card tip-card"><span class="eyebrow">YOUR LANGUAGE PAIR</span><h3>English → Korean</h3><p>English-to-Korean is the language pair currently supported by the generation API.</p></section><section class="card tip-card"><span class="eyebrow">TAKE YOUR LEARNING WITH YOU</span><h3>Import a database</h3><p>Restore lessons, settings, and progress from an existing Linquo SQLite database.</p><ImportButton onImport={imported} onError={report} disabled={Boolean(busy) || !isTauri()}/></section>{settings.provider && <section class="card tip-card"><h3>Disconnect provider</h3><p>Remove the saved provider and API key from this device.</p><button class="text-button" disabled={Boolean(busy)} onClick={async () => { setBusy('disconnect'); try { await invoke('kv_rm', { key: settingsKey }); setSettings({ ...defaults }); setNotice('Provider settings removed.'); } catch (error) { report(error); } finally { setBusy(''); } }}>Remove provider</button></section>}</div></div>
+            <div class="page-heading"><span class="eyebrow">{t('settings.eyebrow')}</span><h1>{t('settings.title')}</h1><p>{t('settings.description')}</p></div>
+            <div class="settings-layout">
+              <section class="card settings-card"><div class="card-title"><Icon name="settings"/><h2>{t('settings.preferences')}</h2></div><SettingsForm key={formKey} initial={settings} pairs={pairs} busy={disabled} onSave={saveSettings}/></section>
+              <div class="settings-aside">
+                <section class="card tip-card"><span class="eyebrow">{t('settings.pairEyebrow')}</span><h3>{pairLabel}</h3><p>{t('settings.pairHelp')}</p></section>
+                <section class="card tip-card">
+                  <span class="eyebrow">{t('settings.databaseEyebrow')}</span><h3>{t('settings.databaseTitle')}</h3><p>{t('settings.databaseDescription')}</p>
+                  <div class="database-actions"><ImportButton onImport={imported} onError={report} disabled={disabled}/><button class="btn secondary" disabled={disabled} onClick={() => void exportDatabase()}><Icon name="download"/>{t(busy === 'export' ? 'database.exporting' : 'database.export')}</button></div>
+                </section>
+                {settings.provider && <section class="card tip-card"><h3>{t('settings.disconnect')}</h3><p>{t('settings.disconnectDescription')}</p><button class="text-button" disabled={Boolean(busy)} onClick={() => void disconnect()}>{t('settings.removeProvider')}</button></section>}
+              </div>
+            </div>
           </>}
         </>}
       </main>
-      <footer class="page-footer"><span>Made for the way you learn.</span><span>Little by little, Linquo.</span></footer>
+      <footer class="page-footer"><span>{t('app.footer')}</span><span>{t('app.footerTagline')}</span></footer>
     </div>
   </div>;
 }

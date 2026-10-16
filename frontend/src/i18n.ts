@@ -3,14 +3,24 @@ import { useEffect, useState } from 'preact/hooks';
 
 import en from './locales/en.json';
 
-i18n.init({
+declare module 'i18next' {
+  interface CustomTypeOptions {
+    resources: { translation: typeof en };
+  }
+}
+
+void i18n.init({
   resources: {
     en: { translation: en }
   },
-  lng: "en",
-  fallbackLng: "en",
-  supportedLngs: ["en"]
+  lng: 'en',
+  fallbackLng: 'en',
+  supportedLngs: ['en'],
+  initAsync: false,
+  interpolation: { escapeValue: false },
 });
+
+export const translate = i18n.t.bind(i18n);
 
 export function useTranslation() {
   const [_, setLanguageVersion] = useState(0);

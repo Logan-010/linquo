@@ -1,6 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useRef, useState } from 'preact/hooks';
-import { invoke, levels, localProvider, type Settings } from './api';
+import { invoke, languageName, levels, localProvider, type LanguagePair, type Settings } from './api';
+import { useTranslation } from './i18n';
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ComponentChildren> = {
@@ -19,6 +20,7 @@ export function Icon({ name, size = 20 }: { name: string; size?: number }) {
 }
 
 export function ImportButton({ onImport, onError, disabled = false }: { onImport: () => Promise<void>; onError: (error: unknown) => void; disabled?: boolean }) {
+  const { t } = useTranslation();
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,7 +28,7 @@ export function ImportButton({ onImport, onError, disabled = false }: { onImport
     if (!file) return;
     setBusy(true);
     try {
-      if (file.size > 100 * 1024 * 1024) throw new Error('The database must be smaller than 100 MB.');
+      if (file.size > 100 * 1024 * 1024) throw new Error(t('errors.databaseSize'));
       await invoke('import_database', { bytes: Array.from(new Uint8Array(await file.arrayBuffer())) });
       setFile(null);
       await onImport();
@@ -35,32 +37,37 @@ export function ImportButton({ onImport, onError, disabled = false }: { onImport
   }
   return <>
     <input ref={input} type="file" accept=".db,.sqlite,.sqlite3,application/vnd.sqlite3" class="hidden" onChange={event => { setFile(event.currentTarget.files?.[0] || null); }} />
-    <button type="button" class="btn secondary" disabled={disabled || busy} onClick={() => { if (input.current) input.current.value = ''; input.current?.click(); }}><Icon name="download"/>Import database</button>
+    <button type="button" class="btn secondary" disabled={disabled || busy} onClick={() => { if (input.current) input.current.value = ''; input.current?.click(); }}><Icon name="download"/>{t('database.import')}</button>
     {file && <div class="modal-backdrop"><section role="dialog" aria-modal="true" aria-labelledby="import-title" class="card modal">
-      <span class="eyebrow">Bring your learning with you</span><h2 id="import-title">Replace this database?</h2>
-      <p>Importing <strong>{file.name}</strong> replaces your current lessons, progress, and settings with those in the file.</p>
-      <div class="actions"><button autoFocus class="btn secondary" disabled={busy} onClick={() => setFile(null)}>Cancel</button><button class="btn primary" disabled={busy} onClick={importFile}>{busy ? 'Importing…' : 'Replace & import'}</button></div>
+      <span class="eyebrow">{t('database.importEyebrow')}</span><h2 id="import-title">{t('database.replaceTitle')}</h2>
+      <p>{t('database.replaceDescription', { filename: file.name })}</p>
+      <div class="actions"><button autoFocus class="btn secondary" disabled={busy} onClick={() => setFile(null)}>{t('common.cancel')}</button><button class="btn primary" disabled={busy} onClick={importFile}>{t(busy ? 'database.importing' : 'database.replace')}</button></div>
     </section></div>}
   </>;
 }
 
-export function SettingsForm({ initial, onSave, busy, setup = false }: { initial: Settings; onSave: (settings: Settings) => Promise<void>; busy: boolean; setup?: boolean }) {
+export function SettingsForm({ initial, onSave, busy, pairs, setup = false }: { initial: Settings; onSave: (settings: Settings) => Promise<void>; busy: boolean; pairs: LanguagePair[]; setup?: boolean }) {
+  const { t } = useTranslation();
   const [value, setValue] = useState(initial);
   const update = <K extends keyof Settings>(key: K, next: Settings[K]) => setValue(old => ({ ...old, [key]: next }));
   const local = localProvider(value.provider);
   return <form onSubmit={event => { event.preventDefault(); void onSave(value); }} class="form-stack">
     <fieldset disabled={busy} class="form-stack">
-      <label>Provider & model<input required value={value.provider} placeholder="openai:gpt-4o-mini" autoCapitalize="off" spellcheck={false} onInput={e => update('provider', e.currentTarget.value)} aria-describedby="provider-help"/><small id="provider-help">Use a provider:model reference, such as openai:gpt-4o-mini or ollama:llama3.2.</small></label>
-      <label>API key <span class="optional">{local ? '(optional for local models)' : '(optional if configured in your environment)'}</span><input type="password" value={value.credentials} placeholder={local ? 'Optional' : 'Your provider API key'} autoComplete="off" onInput={e => update('credentials', e.currentTarget.value)}/></label>
-      {local && <label>Base URL<input type="url" required value={value.baseUrl} placeholder={value.provider.toLowerCase().startsWith('ollama') ? 'http://localhost:11434' : 'http://localhost:8080/v1'} onInput={e => update('baseUrl', e.currentTarget.value)}/><small>The address of your running {value.provider.toLowerCase().startsWith('ollama') ? 'Ollama' : 'llama.cpp'} server.</small></label>}
+      <label>{t('settings.languagePair')}<select value={JSON.stringify([value.source, value.target])} onChange={e => {
+        const [source, target] = JSON.parse(e.currentTarget.value) as [string, string];
+        setValue(old => ({ ...old, source, target }));
+      }}>{pairs.map(pair => <option key={`${pair.source}-${pair.target}`} value={JSON.stringify([pair.source, pair.target])}>{t('app.pair', { source: languageName(pair.source), target: languageName(pair.target) })}</option>)}</select><small>{t('settings.pairHelp')}</small></label>
+      <label>{t('settings.provider')}<input required value={value.provider} placeholder={t('settings.providerPlaceholder')} autoCapitalize="off" spellcheck={false} onInput={e => update('provider', e.currentTarget.value)} aria-describedby="provider-help"/><small id="provider-help">{t('settings.providerHelp')}</small></label>
+      <label>{t('settings.apiKey')} <span class="optional">{t(local ? 'settings.localKeyOptional' : 'settings.envKeyOptional')}</span><input type="password" value={value.credentials} placeholder={t(local ? 'settings.optional' : 'settings.keyPlaceholder')} autoComplete="off" onInput={e => update('credentials', e.currentTarget.value)}/></label>
+      {local && <label>{t('settings.baseUrl')}<input type="url" required value={value.baseUrl} placeholder={t(value.provider.toLowerCase().startsWith('ollama') ? 'settings.ollamaUrl' : 'settings.llamacppUrl')} onInput={e => update('baseUrl', e.currentTarget.value)}/><small>{t('settings.baseUrlHelp', { provider: value.provider.toLowerCase().startsWith('ollama') ? 'Ollama' : 'llama.cpp' })}</small></label>}
       {!setup && <>
         <div class="divider"/>
-        <div class="form-grid"><label>Exercises per lesson<input type="number" min="1" max="30" required value={value.count} onInput={e => update('count', Number(e.currentTarget.value))}/><small>Between 1 and 30 exercises.</small></label>
-        <label>Generation level<select value={value.level} onChange={e => update('level', e.currentTarget.value as Settings['level'])}><option value="auto">Match my proficiency</option>{levels.map(level => <option key={level}>{level}</option>)}</select></label></div>
-        <label class="toggle-row"><span>Show romanization<small>Reading support alongside Korean text.</small></span><input type="checkbox" checked={value.romanize} onChange={e => update('romanize', e.currentTarget.checked)}/></label>
+        <div class="form-grid"><label>{t('settings.count')}<input type="number" min="1" max="30" required value={value.count} onInput={e => update('count', Number(e.currentTarget.value))}/><small>{t('settings.countHelp')}</small></label>
+        <label>{t('settings.level')}<select value={value.level} onChange={e => update('level', e.currentTarget.value as Settings['level'])}><option value="auto">{t('settings.autoLevel')}</option>{levels.map(level => <option key={level}>{level}</option>)}</select></label></div>
+        <label class="toggle-row"><span>{t('settings.romanization')}<small>{t('settings.romanizationHelp')}</small></span><input type="checkbox" checked={value.romanize} onChange={e => update('romanize', e.currentTarget.checked)}/></label>
       </>}
-      <p class="storage-note"><Icon name="leaf" size={16}/>Saved on this device in your app database, including the API key.</p>
-      <button class="btn primary" type="submit">{busy ? 'Saving…' : setup ? 'Save & continue' : 'Save settings'}{!busy && <Icon name="arrow"/>}</button>
+      <p class="storage-note"><Icon name="leaf" size={16}/>{t('settings.storageNote')}</p>
+      <button class="btn primary" type="submit">{t(busy ? 'common.saving' : setup ? 'settings.saveContinue' : 'common.save')}{!busy && <Icon name="arrow"/>}</button>
     </fieldset>
   </form>;
 }

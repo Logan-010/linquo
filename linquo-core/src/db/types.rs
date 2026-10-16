@@ -36,6 +36,16 @@ pub struct Database {
 }
 
 impl Database {
+    /// Create a consistent, standalone SQLite snapshot, including WAL-backed data.
+    /// The destination must not already exist.
+    pub async fn export(&self, path: &std::path::Path) -> Result<(), Error> {
+        sqlx::query("VACUUM main INTO ?")
+            .bind(path.to_string_lossy().as_ref())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Atomically replace all application data with a validated SQLite snapshot.
     pub async fn import(&self, path: &std::path::Path) -> Result<(), Error> {
         let mut connection = self.pool.acquire().await?;
@@ -141,6 +151,61 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn export_captures_committed_wal_data_and_can_be_reimported() {
+        let id = Uuid::now_v7();
+        let source_path = std::env::temp_dir().join(format!("linquo-source-{id}.db"));
+        let snapshot_path = std::env::temp_dir().join(format!("linquo-export-{id}.db"));
+        let source = Database::new(source_path.clone()).await.unwrap();
+        sqlx::query("PRAGMA journal_mode = WAL")
+            .execute(&source.pool)
+            .await
+            .unwrap();
+        source.insert("provider", "ollama:qwen").await.unwrap();
+        source
+            .insert("score-English-Korean", "saved-score")
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO lessons (id, source_language, learning_language, learning_level, total_exercises) VALUES ('lesson', 'English', 'Korean', 'A1', 1)")
+            .execute(&source.pool).await.unwrap();
+        sqlx::query("INSERT INTO exercises (id, lesson_id, kind, direction, instruction, hint, explanation) VALUES ('exercise', 'lesson', '{}', 'source_to_target', 'Translate', 'Hint', 'Explanation')")
+            .execute(&source.pool).await.unwrap();
+        source.export(&snapshot_path).await.unwrap();
+        // Export never overwrites an existing backup.
+        assert!(source.export(&snapshot_path).await.is_err());
+        source
+            .insert("provider", "changed-after-export")
+            .await
+            .unwrap();
+        let snapshot = Database::new(snapshot_path.clone()).await.unwrap();
+        assert_eq!(
+            snapshot.get("provider").await.unwrap().as_deref(),
+            Some("ollama:qwen")
+        );
+        assert_eq!(
+            snapshot
+                .get("score-English-Korean")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("saved-score")
+        );
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM exercises")
+            .fetch_one(&snapshot.pool)
+            .await
+            .unwrap();
+        assert_eq!(count, 1);
+        snapshot.pool.close().await;
+        source.import(&snapshot_path).await.unwrap();
+        assert_eq!(
+            source.get("provider").await.unwrap().as_deref(),
+            Some("ollama:qwen")
+        );
+        source.pool.close().await;
+        tokio::fs::remove_file(source_path).await.unwrap();
+        tokio::fs::remove_file(snapshot_path).await.unwrap();
+    }
+
+    #[tokio::test]
     async fn database_import_replaces_data_and_rolls_back_invalid_snapshots() {
         let target_path = std::env::temp_dir().join(format!("linquo-target-{}.db", Uuid::now_v7()));
         let database = Database::new(target_path.clone()).await.unwrap();
@@ -201,9 +266,9 @@ mod tests {
         // The failed attachment is cleaned up, so a subsequent import succeeds.
         database.import(&source_path).await.unwrap();
         database.pool.close().await;
-        std::fs::remove_file(source_path).unwrap();
-        std::fs::remove_file(invalid_path).unwrap();
-        std::fs::remove_file(target_path).unwrap();
+        tokio::fs::remove_file(source_path).await.unwrap();
+        tokio::fs::remove_file(invalid_path).await.unwrap();
+        tokio::fs::remove_file(target_path).await.unwrap();
     }
 
     #[tokio::test]
