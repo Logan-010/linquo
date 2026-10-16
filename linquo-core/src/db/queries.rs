@@ -139,7 +139,7 @@ pub async fn fetch_exercises(
         WHERE lessons.source_language = ?
           AND lessons.learning_language = ?
           AND lessons.learning_level = ?
-        ORDER BY lessons.id, exercises.position
+        ORDER BY RANDOM()
         LIMIT ?
         "#,
     )
@@ -336,8 +336,14 @@ mod tests {
     #[tokio::test]
     async fn exercises_are_filtered_and_limited() {
         let pool = pool().await;
-        let expected = lesson();
+        let mut expected = lesson();
         insert_lesson(&pool, &expected).await.unwrap();
+        let mut another = lesson();
+        for exercise in &mut another.exercises {
+            exercise.id = format!("another-{}", exercise.id);
+        }
+        insert_lesson(&pool, &another).await.unwrap();
+        expected.exercises.extend(another.exercises);
 
         for (index, source, learning, level) in [
             (0, Language::English, Language::Korean, CefrLevel::B1),
@@ -360,10 +366,20 @@ mod tests {
                     .await
                     .unwrap();
             let count = (n as usize).min(expected.exercises.len());
-            assert_eq!(
-                serde_json::to_value(actual).unwrap(),
-                serde_json::to_value(&expected.exercises[..count]).unwrap()
-            );
+            assert_eq!(actual.len(), count);
+            let mut ids = std::collections::HashSet::new();
+            for exercise in actual {
+                assert!(ids.insert(exercise.id.clone()));
+                let original = expected
+                    .exercises
+                    .iter()
+                    .find(|e| e.id == exercise.id)
+                    .unwrap();
+                assert_eq!(
+                    serde_json::to_value(&exercise).unwrap(),
+                    serde_json::to_value(original).unwrap()
+                );
+            }
         }
         assert!(
             fetch_exercises(&pool, Language::English, Language::Korean, CefrLevel::C2, 5)

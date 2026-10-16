@@ -37,17 +37,26 @@ pub enum Language {
     English,
     /// Korean.
     Korean,
+    /// Spanish.
+    Spanish,
 }
 
 #[derive(Embed)]
 #[folder = "prompts"]
 struct Prompts;
 
-const LANGUAGE_PAIRS: &[(Language, Language, &str)] = &[(
-    Language::English,
-    Language::Korean,
-    "english_learning_korean.txt",
-)];
+const LANGUAGE_PAIRS: &[(Language, Language, &str)] = &[
+    (
+        Language::English,
+        Language::Korean,
+        "english_learning_korean.txt",
+    ),
+    (
+        Language::English,
+        Language::Spanish,
+        "english_learning_spanish.txt",
+    ),
+];
 
 impl Language {
     /// Supported native/learning pairs, shared with the frontend.
