@@ -1,0 +1,14 @@
+[package]
+name = "core"
+version = "0.1.0"
+edition = "2024"
+description = "Linquo core library"
+authors = ["Logan-010"]
+
+[dependencies]
+rig = "0.44.0"
+schemars = "1.2.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+
