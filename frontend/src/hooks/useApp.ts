@@ -5,7 +5,7 @@ import {
 } from '../api';
 import type { SessionItem } from '../ExerciseSession';
 import { useTranslation } from '../i18n';
-import appIcon from '../../../linquo-app/icons/icon.png';
+import appIcon from '../../icon.png';
 import type { Busy, Page, Stats } from '../types';
 
 const settingsKey = 'linquo-settings-v1';
