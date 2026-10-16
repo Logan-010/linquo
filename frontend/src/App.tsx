@@ -6,7 +6,7 @@ import { useTranslation } from './i18n';
 import { LearnPage } from './pages/LearnPage';
 import { GeneratePage } from './pages/GeneratePage';
 import { SettingsPage } from './pages/SettingsPage';
-import appIcon from '../../linquo-app/icons/icon.png';
+import appIcon from '../icon.png';
 
 export function App() {
   const { t } = useTranslation();

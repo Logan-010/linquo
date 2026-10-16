@@ -53,7 +53,7 @@
               ]);
           };
           nodejs = pkgs.nodejs_26;
-          npmDepsHash = "sha256-8u4acDntFrAHKnslGd/PnDLLL1EHZik/U6WF5dsxqpo=";
+          npmDepsHash = "sha256-yrlMGBHIGhlkYodY8QeyXXxskcbF86mFLBdEPJQjoLM=";
           installPhase = ''
             runHook preInstall
             mkdir -p "$out"
@@ -66,7 +66,10 @@
 
         # WebKitGTK's Web Audio backend needs appsrc/appsink (base),
         # autoaudiosink and PulseAudio output (good, also works with PipeWire).
-        audioPlugins = with pkgs.gst_all_1; [ gst-plugins-base gst-plugins-good ];
+        audioPlugins = with pkgs.gst_all_1; [
+          gst-plugins-base
+          gst-plugins-good
+        ];
         audioPluginPath = pkgs.lib.makeSearchPath "lib/gstreamer-1.0" audioPlugins;
 
         buildInputs =
@@ -89,7 +92,8 @@
             glib-networking
             gsettings-desktop-schemas
             gst_all_1.gstreamer
-          ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux audioPlugins;
+          ]
+          ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux audioPlugins;
 
         app = naersk-lib.buildPackage {
           name = "linquo";
@@ -116,8 +120,6 @@
             ++ [
               "--package"
               "linquo"
-              "--bin"
-              "linquo"
               "--features"
               "custom-protocol"
               "--locked"
@@ -131,9 +133,11 @@
               mkdir -p frontend/dist
               cp -r ${frontend}/. frontend/dist/
             '';
-            preFixup = (attrs.preFixup or "") + pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
-              gappsWrapperArgs+=(--prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${audioPluginPath}")
-            '';
+            preFixup =
+              (attrs.preFixup or "")
+              + pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+                gappsWrapperArgs+=(--prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${audioPluginPath}")
+              '';
           };
 
           meta = {
