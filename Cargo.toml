@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
-members = ["linquo-core"]
+members = ["linquo-core", "linquo-app"]
+default-members = ["linquo-app"]
 
 [workspace.dependencies]
 linquo-core = { path = "linquo-core" }
