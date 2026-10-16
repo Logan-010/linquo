@@ -22,6 +22,15 @@ serde_json = "1.0.154"
 tauri = { version = "2.12.4", features = [] }
 tauri-plugin-log = "2"
 tokio = { version = "1.53.3", default-features = false, features = ["fs"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"] }
+ort = { version = "=2.0.0-rc.9" }
+ort-sys = "=2.0.0-rc.9"
+ndarray = "0.16"
+rand = "0.8"
+rand_distr = "0.4"
+unicode-normalization = "0.1"
 
 [features]
 # The Tauri CLI enables this for production builds. Nix enables it explicitly.

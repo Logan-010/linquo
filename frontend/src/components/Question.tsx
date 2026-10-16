@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { Exercise, Text } from '../api';
 import { Icon } from './Icon';
 import { useTranslation } from '../i18n';
+import { useSpeech } from '../hooks/useSpeech';
 
 function shuffle<T>(items: T[]): T[] {
   const result = [...items];
@@ -15,8 +16,13 @@ function LocalText({ value, romanize }: { value: Text; romanize: boolean }) {
   return <span class="localized">{value.text}{romanize && value.romanization && <small>{value.romanization}</small>}</span>;
 }
 
-export function Question({ exercise: ex, romanize, disabled, onAnswer }: { exercise: Exercise; romanize: boolean; disabled: boolean; onAnswer: (correct: boolean, solution: string) => Promise<void> }) {
+export function Question({ exercise: ex, romanize, speech, disabled, onAnswer }: { exercise: Exercise; romanize: boolean; speech: boolean; disabled: boolean; onAnswer: (correct: boolean, solution: string) => Promise<void> }) {
   const { t } = useTranslation();
+  const { speak, stop, error: speechError } = useSpeech(speech);
+  useEffect(() => {
+    if (ex.prompt) speak(ex.prompt.text);
+    return stop;
+  }, [ex, speech]);
   const [selected, setSelected] = useState<string[]>([]);
   const [matches, setMatches] = useState<Record<string, string>>({});
   const [left, setLeft] = useState<string | null>(null);
@@ -42,8 +48,14 @@ export function Question({ exercise: ex, romanize, disabled, onAnswer }: { exerc
   }
   return <>
     <div class="question-heading"><span class="eyebrow">{t(`exercise.types.${ex.type}`)}</span><h2>{ex.instruction}</h2></div>
-    {ex.prompt && <div class="prompt"><LocalText value={ex.prompt} romanize={romanize}/></div>}
-    <fieldset disabled={disabled} class="question-inputs">
+    {ex.prompt && <div class="prompt"><LocalText value={ex.prompt} romanize={romanize}/>{speech && <button type="button" class="text-button" onClick={() => speak(ex.prompt!.text)}>{t('speech.replay')}</button>}</div>}
+    {speechError && <p class="notice error" role="alert">{speechError}</p>}
+    <fieldset disabled={disabled} class="question-inputs" onClick={event => {
+      if (disabled) return;
+      const button = (event.target as HTMLElement).closest('button');
+      const text = button?.querySelector('.localized')?.firstChild?.textContent;
+      if (button && !button.disabled && text) speak(text);
+    }}>
       <legend class="sr-only">{t('exercise.answer')}</legend>
       {ex.type === 'word_bank_translation' && <>
         <div class="answer-bank" aria-label={t('exercise.selectedWords')}>{selected.length === 0 ? <span class="muted">{t('exercise.buildAnswer')}</span> : selected.map((id, index) => <button type="button" class="tile selected" key={id} onClick={() => setSelected(selected.filter((_, i) => i !== index))}><LocalText value={ex.data.tiles.find(tile => tile.id === id)!} romanize={romanize}/><span class="sr-only">{t('exercise.removeWord')}</span></button>)}</div>

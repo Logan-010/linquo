@@ -33,11 +33,12 @@ export interface Settings extends LanguagePair {
   baseUrl: string;
   count: number;
   romanize: boolean;
+  speech: boolean;
   level: Level | 'auto';
 }
 export const defaults: Settings = {
   ...defaultPair,
-  provider: '', credentials: '', baseUrl: '', count: 10, romanize: true, level: 'auto',
+  provider: '', credentials: '', baseUrl: '', count: 10, romanize: true, speech: false, level: 'auto',
 };
 
 declare global {
@@ -73,6 +74,7 @@ export function parseSettings(value: string | null): Settings {
     baseUrl: typeof saved.baseUrl === 'string' ? saved.baseUrl : '',
     count: Number.isInteger(saved.count) ? Math.min(30, Math.max(1, saved.count)) : 10,
     romanize: typeof saved.romanize === 'boolean' ? saved.romanize : true,
+    speech: saved.speech === true,
     level: levels.includes(saved.level) ? saved.level : 'auto',
   };
 }

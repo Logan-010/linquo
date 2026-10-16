@@ -64,11 +64,18 @@
 
         nativeBuildInputs = with pkgs; [ pkg-config ];
 
+        # WebKitGTK's Web Audio backend needs appsrc/appsink (base),
+        # autoaudiosink and PulseAudio output (good, also works with PipeWire).
+        audioPlugins = with pkgs.gst_all_1; [ gst-plugins-base gst-plugins-good ];
+        audioPluginPath = pkgs.lib.makeSearchPath "lib/gstreamer-1.0" audioPlugins;
+
         buildInputs =
           with pkgs;
           [
             openssl
             sqlite
+            onnxruntime
+            stdenv.cc.cc.lib
           ]
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
             gtk3
@@ -81,7 +88,8 @@
             librsvg
             glib-networking
             gsettings-desktop-schemas
-          ];
+            gst_all_1.gstreamer
+          ] ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux audioPlugins;
 
         app = naersk-lib.buildPackage {
           name = "linquo";
@@ -100,6 +108,8 @@
               ]);
           };
           inherit nativeBuildInputs buildInputs;
+          ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
+          ORT_PREFER_DYNAMIC_LINK = "1";
           cargoBuildOptions =
             options:
             options
@@ -120,6 +130,9 @@
             postPatch = (attrs.postPatch or "") + ''
               mkdir -p frontend/dist
               cp -r ${frontend}/. frontend/dist/
+            '';
+            preFixup = (attrs.preFixup or "") + pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+              gappsWrapperArgs+=(--prefix GST_PLUGIN_SYSTEM_PATH_1_0 : "${audioPluginPath}")
             '';
           };
 
@@ -161,10 +174,13 @@
             ];
 
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
+            ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
+            ORT_PREFER_DYNAMIC_LINK = "1";
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
             GIO_EXTRA_MODULES = "${pkgs.glib-networking}/lib/gio/modules";
             LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath buildInputs;
+            GST_PLUGIN_SYSTEM_PATH_1_0 = audioPluginPath;
           }
         );
       }

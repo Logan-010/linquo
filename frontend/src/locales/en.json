@@ -1,4 +1,18 @@
 {
+  "speech": {
+    "progressLabel": "Speech model download progress",
+    "progress": "{{percent}}% · {{downloaded}} / {{total}} MB",
+    "preparing": "Preparing download…",
+    "enable": "Experimental speech synthesis",
+    "help": "Read question prompts and pressed words aloud with Supertonic 3. Download the weights, then save settings to enable. Audio is generated locally.",
+    "download": "Download speech weights",
+    "delete": "Delete speech weights",
+    "clear": "Clear partial download",
+    "working": "Updating speech weights… This may take several minutes.",
+    "ready": "Speech weights are downloaded and ready for offline use.",
+    "missing": "Speech weights must be downloaded before playback (approximately 400 MB).",
+    "replay": "Read question aloud"
+  },
   "app": {
     "name": "Linquo", "wordmark": "linquo", "home": "Linquo home",
     "tagline": "A little, every day.", "navigation": "Main navigation",

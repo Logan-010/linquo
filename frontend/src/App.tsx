@@ -53,7 +53,7 @@ export function App() {
           <span class="spinner" /><h2>{t('app.opening')}</h2>
           {error && <div class="actions"><button class="btn secondary" onClick={() => void boot().catch(report)}>{t('common.retry')}</button><ImportButton onImport={imported} onError={report} /></div>}
         </div>
-          : session ? <ExerciseSession items={session.items} assessment={session.assessment} romanize={settings.romanize} onFinish={finish} onExit={exitSession} />
+          : session ? <ExerciseSession items={session.items} assessment={session.assessment} romanize={settings.romanize} speech={settings.speech} onFinish={finish} onExit={exitSession} />
             : summary ? <section class="card summary">
               <span class="summary-icon"><Icon name={summary.assessment ? 'chart' : 'check'} size={40} /></span>
               <span class="eyebrow">{t(summary.assessment ? 'summary.assessmentEyebrow' : 'summary.eyebrow')}</span>

@@ -2,6 +2,7 @@ mod db;
 mod generator;
 mod score;
 mod state;
+mod synthesis;
 mod util;
 
 use linquo_core::db::Database;
@@ -24,6 +25,7 @@ pub fn run() {
             ))?;
 
             app.manage(AppState::new(db));
+            app.manage(synthesis::Synthesis::default());
 
             Ok(())
         })
@@ -42,7 +44,12 @@ pub fn run() {
             score::save_score,
             score::correct,
             score::incorrect,
-            score::score
+            score::score,
+            synthesis::speek,
+            synthesis::synthesis_status,
+            synthesis::synthesis_download_progress,
+            synthesis::download_synthesis_weights,
+            synthesis::delete_synthesis_weights
         ])
         .run(tauri::generate_context!())
         .expect("Error while building tauri application");

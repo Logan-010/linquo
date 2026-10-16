@@ -86,7 +86,7 @@ export function useApp() {
   async function saveSettings(next: Settings) {
     setBusy('settings'); setError(''); setNotice('');
     try {
-      if (!/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?:\S+$/i.test(next.provider.trim())) throw new Error(t('errors.providerFormat'));
+      if (next.provider.trim() && !/^[a-z][a-z0-9_-]*(?:\/[a-z][a-z0-9_-]*)?:\S+$/i.test(next.provider.trim())) throw new Error(t('errors.providerFormat'));
       if (!pairs.some(p => p.source === next.source && p.target === next.target)) throw new Error(t('errors.unsupportedPair'));
       await put(settingsKey, next);
       if (next.source !== pair.source || next.target !== pair.target) await loadPair(next);

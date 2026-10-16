@@ -6,7 +6,7 @@ import { useTranslation } from './i18n';
 
 export interface SessionItem { exercise: Exercise; level: Level }
 
-export function ExerciseSession({ items, assessment, romanize, onFinish, onExit }: { items: SessionItem[]; assessment: boolean; romanize: boolean; onFinish: (correct: number, total: number) => Promise<void>; onExit: () => void }) {
+export function ExerciseSession({ items, assessment, romanize, speech, onFinish, onExit }: { items: SessionItem[]; assessment: boolean; romanize: boolean; speech: boolean; onFinish: (correct: number, total: number) => Promise<void>; onExit: () => void }) {
   const { t } = useTranslation();
   const [index, setIndex] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
@@ -41,7 +41,7 @@ export function ExerciseSession({ items, assessment, romanize, onFinish, onExit 
   return <section class="session">
     <div class="session-top"><button class="icon-button" aria-label={t('exercise.exit')} onClick={() => setConfirmExit(true)} disabled={busy}><Icon name="close"/></button><div class="progress-track" role="progressbar" aria-label={t('exercise.progress')} aria-valuemin={0} aria-valuemax={items.length} aria-valuenow={index + (feedback ? 1 : 0)}><div style={{ width: `${(index + (feedback ? 1 : 0)) / items.length * 100}%` }}/></div><span class="muted tabular-nums">{t('common.fraction', { current: index + 1, total: items.length })}</span></div>
     <div class="session-meta"><span>{t(assessment ? 'exercise.assessment' : 'exercise.practice')}</span><span class="badge">{item.level}</span></div>
-    <div class="card question-card"><Question key={index} exercise={item.exercise} romanize={romanize} disabled={busy || Boolean(feedback) || Boolean(pending)} onAnswer={answer}/>
+    <div class="card question-card"><Question key={index} exercise={item.exercise} romanize={romanize} speech={speech} disabled={busy || Boolean(feedback) || Boolean(pending)} onAnswer={answer}/>
       {feedback && <div class={`feedback ${feedback.correct ? 'positive' : 'negative'}`} role="status"><div class="feedback-title"><Icon name={feedback.correct ? 'check' : 'book'}/><h3>{t(feedback.correct ? 'exercise.correct' : 'exercise.incorrect')}</h3></div>{!feedback.correct && <p><strong>{t('exercise.correctAnswer')}</strong> {feedback.solution}</p>}<p>{item.exercise.explanation}</p><button class="btn primary" onClick={next} disabled={busy}>{t(busy ? 'common.saving' : index + 1 === items.length ? assessment ? 'exercise.seeLevel' : 'exercise.finish' : 'common.continue')}<Icon name="arrow"/></button></div>}
       {error && <div class="notice error" role="alert"><p>{error}</p>{pending && <button class="text-button" disabled={busy} onClick={() => void answer(pending.correct, pending.solution)}>{t('exercise.retrySave')}</button>}</div>}
     </div>
