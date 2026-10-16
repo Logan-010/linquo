@@ -12,7 +12,11 @@ pub async fn import_database(app: AppHandle, bytes: Vec<u8>) -> Result<(), Strin
     let mut generator = state.generator.lock().await;
     let mut score = state.score.lock().await;
     let mut score_key = state.score_key.lock().await;
-    let path = app.path().app_cache_dir().map_err(crate::errstr)?.join("import.db");
+    let path = app
+        .path()
+        .app_cache_dir()
+        .map_err(crate::errstr)?
+        .join("import.db");
     std::fs::create_dir_all(path.parent().unwrap()).map_err(crate::errstr)?;
     std::fs::write(&path, bytes).map_err(crate::errstr)?;
     let result = state.db.import(&path).await.map_err(crate::errstr);

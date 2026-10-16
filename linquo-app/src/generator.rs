@@ -3,7 +3,6 @@ use linquo_core::{
     generation::{Generator, InputLevel, Language, Lesson, LessonInput},
     provider,
 };
-use std::env;
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
@@ -15,15 +14,7 @@ pub async fn init_generation(
     source: Language,
     target: Language,
 ) -> Result<(), String> {
-    if let Some(url) = base_url {
-        // SAFETY: These variables do not cause race conditions.
-        unsafe {
-            env::set_var("OLLAMA_API_BASE_URL", &url);
-            env::set_var("OPENAI_BASE_URL", &url);
-        }
-    }
-
-    let model = provider::connect(&provider, credentials.as_deref())
+    let model = provider::connect_at(&provider, credentials.as_deref(), base_url.as_deref())
         .await
         .map_err(crate::errstr)?;
 

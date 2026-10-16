@@ -41,26 +41,41 @@ impl Database {
         let mut connection = self.pool.acquire().await?;
         sqlx::query("ATTACH DATABASE ? AS imported")
             .bind(path.to_string_lossy().as_ref())
-            .execute(&mut *connection).await?;
+            .execute(&mut *connection)
+            .await?;
         let result = async {
             let integrity: String = sqlx::query_scalar("PRAGMA imported.integrity_check")
-                .fetch_one(&mut *connection).await?;
+                .fetch_one(&mut *connection)
+                .await?;
             if integrity != "ok" {
-                return Err(Error::Io(io::Error::new(io::ErrorKind::InvalidData, integrity)));
+                return Err(Error::Io(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    integrity,
+                )));
             }
             use sqlx::Acquire;
             let mut tx = connection.begin().await?;
-            sqlx::query("DELETE FROM exercises").execute(&mut *tx).await?;
+            sqlx::query("DELETE FROM exercises")
+                .execute(&mut *tx)
+                .await?;
             sqlx::query("DELETE FROM lessons").execute(&mut *tx).await?;
-            sqlx::query("DELETE FROM key_value_store").execute(&mut *tx).await?;
-            for table in ["key_value_store", "lessons", "exercises"] {
-                sqlx::query(&format!("INSERT INTO main.{table} SELECT * FROM imported.{table}"))
-                    .execute(&mut *tx).await?;
+            sqlx::query("DELETE FROM key_value_store")
+                .execute(&mut *tx)
+                .await?;
+            for statement in [
+                "INSERT INTO main.key_value_store SELECT * FROM imported.key_value_store",
+                "INSERT INTO main.lessons SELECT * FROM imported.lessons",
+                "INSERT INTO main.exercises SELECT * FROM imported.exercises",
+            ] {
+                sqlx::query(statement).execute(&mut *tx).await?;
             }
             tx.commit().await?;
             Ok(())
-        }.await;
-        sqlx::query("DETACH DATABASE imported").execute(&mut *connection).await?;
+        }
+        .await;
+        sqlx::query("DETACH DATABASE imported")
+            .execute(&mut *connection)
+            .await?;
         result
     }
 
@@ -124,6 +139,72 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn database_import_replaces_data_and_rolls_back_invalid_snapshots() {
+        let target_path = std::env::temp_dir().join(format!("linquo-target-{}.db", Uuid::now_v7()));
+        let database = Database::new(target_path.clone()).await.unwrap();
+        database.insert("old-setting", "old").await.unwrap();
+
+        let source_path = std::env::temp_dir().join(format!("linquo-import-{}.db", Uuid::now_v7()));
+        let source = Database::new(source_path.clone()).await.unwrap();
+        source.insert("provider", "ollama:llama3.2").await.unwrap();
+        source
+            .insert("score-English-Korean", "saved-score")
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO lessons (id, source_language, learning_language, learning_level, total_exercises) VALUES ('lesson', 'English', 'Korean', 'A1', 1)")
+            .execute(&source.pool).await.unwrap();
+        sqlx::query("INSERT INTO exercises (id, lesson_id, kind, direction, instruction, hint, explanation) VALUES ('exercise', 'lesson', '{}', 'source_to_target', 'Translate', 'Hint', 'Explanation')")
+            .execute(&source.pool).await.unwrap();
+        source.pool.close().await;
+
+        database.import(&source_path).await.unwrap();
+        assert_eq!(database.get("old-setting").await.unwrap(), None);
+        assert_eq!(
+            database.get("provider").await.unwrap().as_deref(),
+            Some("ollama:llama3.2")
+        );
+        assert_eq!(
+            database
+                .get("score-English-Korean")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("saved-score")
+        );
+        let exercises: i64 = sqlx::query_scalar("SELECT count(*) FROM exercises")
+            .fetch_one(&database.pool)
+            .await
+            .unwrap();
+        assert_eq!(exercises, 1);
+
+        // A valid SQLite file with incomplete Linquo tables must not erase existing data.
+        let invalid_path =
+            std::env::temp_dir().join(format!("linquo-invalid-{}.db", Uuid::now_v7()));
+        let invalid = super::super::connect::connect(&invalid_path).await.unwrap();
+        sqlx::query("DROP TABLE exercises")
+            .execute(&invalid)
+            .await
+            .unwrap();
+        invalid.close().await;
+        assert!(database.import(&invalid_path).await.is_err());
+        assert_eq!(
+            database.get("provider").await.unwrap().as_deref(),
+            Some("ollama:llama3.2")
+        );
+        let exercises: i64 = sqlx::query_scalar("SELECT count(*) FROM exercises")
+            .fetch_one(&database.pool)
+            .await
+            .unwrap();
+        assert_eq!(exercises, 1);
+        // The failed attachment is cleaned up, so a subsequent import succeeds.
+        database.import(&source_path).await.unwrap();
+        database.pool.close().await;
+        std::fs::remove_file(source_path).unwrap();
+        std::fs::remove_file(invalid_path).unwrap();
+        std::fs::remove_file(target_path).unwrap();
+    }
 
     #[tokio::test]
     async fn key_values_can_be_inserted_updated_and_removed() {

@@ -57,6 +57,12 @@ impl Generator {
             .await
             .map_err(Box::new)?;
 
-        Ok(response.output)
+        let mut lesson = response.output;
+        // Model-generated identifiers are only unique within one response (e.g. E001).
+        // Persist globally unique IDs so subsequent lessons can coexist in the library.
+        for exercise in &mut lesson.exercises {
+            exercise.id = uuid::Uuid::now_v7().to_string();
+        }
+        Ok(lesson)
     }
 }
