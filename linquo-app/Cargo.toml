@@ -21,10 +21,10 @@ log = "0.4"
 serde_json = "1.0.154"
 tauri = { version = "2.12.4", features = [] }
 tauri-plugin-log = "2"
-tokio = { version = "1.53.3", default-features = false, features = ["fs"] }
-anyhow = "1"
+tokio = { version = "1.53.3", default-features = false, features = ["fs", "sync"] }
+color-eyre = "0.6"
+hf-hub = { version = "0.4.3", default-features = false, features = ["tokio", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"] }
 ort = { version = "=2.0.0-rc.9" }
 ort-sys = "=2.0.0-rc.9"
 ndarray = "0.16"

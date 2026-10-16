@@ -1,6 +1,6 @@
 //! Single-voice CPU inference adapted from Supertone's Supertonic Rust example.
 //! See THIRD_PARTY.md for attribution.
-use anyhow::{Result, ensure};
+use color_eyre::eyre::{Result, ensure, eyre};
 use ndarray::{Array, Array3};
 use ort::{
     session::{Session, SessionInputValue},
@@ -112,7 +112,13 @@ impl Model {
         })
     }
 
-    pub fn speak(&mut self, text: &str) -> Result<(Vec<f32>, usize)> {
+    pub fn speak(
+        &mut self,
+        text: &str,
+        rate: f32,
+        check: impl Fn() -> Result<()>,
+    ) -> Result<(Vec<f32>, usize)> {
+        check()?;
         // Language-agnostic tags support mixed source/target prompts without guessing
         // their language from the exercise's instruction or romanization.
         let normalized: String = text
@@ -125,6 +131,7 @@ impl Model {
         let mut audio = Vec::new();
         // Chunk before NFKD so Korean syllables remain intact at boundaries.
         for chunk in chunks(&normalized) {
+            check()?;
             if !audio.is_empty() {
                 audio.resize(audio.len() + self.config.ae.sample_rate / 5, 0.0);
             }
@@ -150,13 +157,14 @@ impl Model {
                 .try_extract_tensor::<f32>()?
                 .iter()
                 .next()
-                .ok_or_else(|| anyhow::anyhow!("Missing duration"))?
-                / 1.05;
+                .ok_or_else(|| eyre!("Missing duration"))?
+                / (1.05 * rate);
             ensure!(
                 duration.is_finite() && duration > 0.0 && duration <= 60.0,
                 "Invalid predicted speech duration"
             );
             let samples = (duration * self.config.ae.sample_rate as f32) as usize;
+            check()?;
             let outputs = self.encoder.run(vec![
                 ("text_ids", SessionInputValue::from(ids.view())),
                 ("style_ttl", ttl.view().into()),
@@ -171,8 +179,10 @@ impl Model {
                 |_| StandardNormal.sample(&mut rng),
             ))?;
             let latent_mask = Tensor::from_array(Array3::<f32>::ones((1, 1, length)))?;
-            let total = Tensor::from_array(Array::from_elem(1, 8.0_f32))?;
-            for step in 0..8 {
+            const STEPS: usize = 5;
+            let total = Tensor::from_array(Array::from_elem(1, STEPS as f32))?;
+            for step in 0..STEPS {
+                check()?;
                 let current = Tensor::from_array(Array::from_elem(1, step as f32))?;
                 let outputs = self.estimator.run(vec![
                     ("noisy_latent", SessionInputValue::from(latent.view())),
@@ -189,6 +199,7 @@ impl Model {
                         .to_owned(),
                 )?;
             }
+            check()?;
             let outputs = self
                 .vocoder
                 .run(vec![("latent", SessionInputValue::from(latent.view()))])?;

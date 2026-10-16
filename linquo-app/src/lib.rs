@@ -12,6 +12,7 @@ use util::errstr;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    color_eyre::install().expect("Failed to install error reporting");
     tauri::Builder::default()
         .setup(|app| {
             app.handle().plugin(
@@ -46,6 +47,7 @@ pub fn run() {
             score::incorrect,
             score::score,
             synthesis::speek,
+            synthesis::cancel_speech,
             synthesis::synthesis_status,
             synthesis::synthesis_download_progress,
             synthesis::download_synthesis_weights,

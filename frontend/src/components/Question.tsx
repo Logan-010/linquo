@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useLayoutEffect, useMemo, useState } from 'preact/hooks';
 import type { Exercise, Text } from '../api';
 import { Icon } from './Icon';
 import { useTranslation } from '../i18n';
@@ -19,7 +19,7 @@ function LocalText({ value, romanize }: { value: Text; romanize: boolean }) {
 export function Question({ exercise: ex, romanize, speech, disabled, onAnswer }: { exercise: Exercise; romanize: boolean; speech: boolean; disabled: boolean; onAnswer: (correct: boolean, solution: string) => Promise<void> }) {
   const { t } = useTranslation();
   const { speak, stop, error: speechError } = useSpeech(speech);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (ex.prompt) speak(ex.prompt.text);
     return stop;
   }, [ex, speech]);
@@ -57,7 +57,7 @@ export function Question({ exercise: ex, romanize, speech, disabled, onAnswer }:
       if (disabled) return;
       const button = (event.target as HTMLElement).closest('button');
       const text = button?.querySelector('.localized')?.firstChild?.textContent;
-      if (button && !button.disabled && text) speak(text, { interrupt: false });
+      if (button && !button.disabled && text) speak(text);
     }}>
       <legend class="sr-only">{t('exercise.answer')}</legend>
       {ex.type === 'word_bank_translation' && <>
@@ -74,8 +74,8 @@ export function Question({ exercise: ex, romanize, speech, disabled, onAnswer }:
     <div class="question-actions">
       <button class="text-button" disabled={disabled} onClick={() => setHint(!hint)}>{t(hint ? 'exercise.hideHint' : 'exercise.hint')}</button>
       <div class="actions">
-        <button type="button" class="btn secondary" disabled={disabled} onClick={() => { if (ex.type !== 'match_pairs') speak(solution); void onAnswer(false, solution); }}>{t('exercise.dontKnow')}</button>
-        <button class="btn primary" disabled={!ready || disabled} onClick={() => { if (ex.type !== 'match_pairs') speak(solution); void onAnswer(correct, solution); }}>{t(disabled ? 'common.saving' : 'exercise.check')}<Icon name="check"/></button>
+        <button type="button" class="btn secondary" disabled={disabled} onClick={() => { if (ex.type !== 'match_pairs') speak(solution); else stop(); void onAnswer(false, solution); }}>{t('exercise.dontKnow')}</button>
+        <button class="btn primary" disabled={!ready || disabled} onClick={() => { if (ex.type !== 'match_pairs') speak(solution); else stop(); void onAnswer(correct, solution); }}>{t(disabled ? 'common.saving' : 'exercise.check')}<Icon name="check"/></button>
       </div>
     </div>
     {hint && <p class="hint">{ex.hint}</p>}
