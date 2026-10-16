@@ -17,6 +17,7 @@ pub async fn load_score(
     if quiz {
         let quizzer = Quizzer::with_weight(3);
         *state.score.lock().await = Some(quizzer);
+        *state.score_key.lock().await = Some(format!("score-{:?}-{:?}", source, target));
         Ok(CefrLevel::A1)
     } else {
         let key = format!("score-{:?}-{:?}", source, target);

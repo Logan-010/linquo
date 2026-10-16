@@ -36,6 +36,34 @@ pub struct Database {
 }
 
 impl Database {
+    /// Atomically replace all application data with a validated SQLite snapshot.
+    pub async fn import(&self, path: &std::path::Path) -> Result<(), Error> {
+        let mut connection = self.pool.acquire().await?;
+        sqlx::query("ATTACH DATABASE ? AS imported")
+            .bind(path.to_string_lossy().as_ref())
+            .execute(&mut *connection).await?;
+        let result = async {
+            let integrity: String = sqlx::query_scalar("PRAGMA imported.integrity_check")
+                .fetch_one(&mut *connection).await?;
+            if integrity != "ok" {
+                return Err(Error::Io(io::Error::new(io::ErrorKind::InvalidData, integrity)));
+            }
+            use sqlx::Acquire;
+            let mut tx = connection.begin().await?;
+            sqlx::query("DELETE FROM exercises").execute(&mut *tx).await?;
+            sqlx::query("DELETE FROM lessons").execute(&mut *tx).await?;
+            sqlx::query("DELETE FROM key_value_store").execute(&mut *tx).await?;
+            for table in ["key_value_store", "lessons", "exercises"] {
+                sqlx::query(&format!("INSERT INTO main.{table} SELECT * FROM imported.{table}"))
+                    .execute(&mut *tx).await?;
+            }
+            tx.commit().await?;
+            Ok(())
+        }.await;
+        sqlx::query("DETACH DATABASE imported").execute(&mut *connection).await?;
+        result
+    }
+
     /// Open (or create) a database at the given path and run migrations.
     pub async fn new(path: PathBuf) -> Result<Self, Error> {
         let pool = super::connect(path).await?;

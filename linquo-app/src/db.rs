@@ -3,6 +3,28 @@ use linquo_core::generation::{CefrLevel, Exercise, Language, Lesson};
 use tauri::{AppHandle, Manager};
 
 #[tauri::command]
+pub async fn import_database(app: AppHandle, bytes: Vec<u8>) -> Result<(), String> {
+    if bytes.len() > 100 * 1024 * 1024 || !bytes.starts_with(b"SQLite format 3\0") {
+        return Err("Choose a Linquo SQLite database smaller than 100 MB.".into());
+    }
+    let state = app.state::<AppState>();
+    // Hold all session locks so an import cannot race an in-flight lesson or score update.
+    let mut generator = state.generator.lock().await;
+    let mut score = state.score.lock().await;
+    let mut score_key = state.score_key.lock().await;
+    let path = app.path().app_cache_dir().map_err(crate::errstr)?.join("import.db");
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(crate::errstr)?;
+    std::fs::write(&path, bytes).map_err(crate::errstr)?;
+    let result = state.db.import(&path).await.map_err(crate::errstr);
+    let _ = std::fs::remove_file(path);
+    result?;
+    *generator = None;
+    *score = None;
+    *score_key = None;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn kv_get(app: AppHandle, key: String) -> Result<Option<String>, String> {
     app.state::<AppState>()
         .db
