@@ -18,7 +18,7 @@ function LocalText({ value, romanize }: { value: Text; romanize: boolean }) {
 
 export function Question({ exercise: ex, romanize, speech, disabled, onAnswer }: { exercise: Exercise; romanize: boolean; speech: boolean; disabled: boolean; onAnswer: (correct: boolean, solution: string) => Promise<void> }) {
   const { t } = useTranslation();
-  const { speak, stop, error: speechError } = useSpeech(speech);
+  const { speak, stop, resumeAudio, error: speechError, status: speechStatus } = useSpeech(speech);
   useLayoutEffect(() => {
     if (ex.prompt) speak(ex.prompt.text);
     return stop;
@@ -53,6 +53,7 @@ export function Question({ exercise: ex, romanize, speech, disabled, onAnswer }:
       <button type="button" class="btn secondary" onClick={() => speak(ex.prompt!.text, { rate: 0.75 })}><Icon name="volume"/>{t('speech.replaySlow')}</button>
     </div>}</div>}
     {speechError && <p class="notice error" role="alert">{speechError}</p>}
+    {speechStatus === 'blocked' && <button type="button" class="btn secondary" onClick={resumeAudio}>{t('speech.resume')}</button>}
     <fieldset disabled={disabled} class="question-inputs" onClickCapture={event => {
       if (disabled) return;
       const button = (event.target as HTMLElement).closest('button');

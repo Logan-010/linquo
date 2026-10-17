@@ -6,6 +6,25 @@ default-members = ["linquo-app"]
 [workspace.dependencies]
 linquo-core = { path = "linquo-core" }
 
+# Speech runs Rust numerical kernels, which are prohibitively slow at opt-level 0.
+# Keep application code debuggable while making `cargo tauri dev` usable.
+[profile.dev.package.tract-core]
+opt-level = 3
+[profile.dev.package.tract-data]
+opt-level = 3
+[profile.dev.package.tract-linalg]
+opt-level = 3
+[profile.dev.package.tract-hir]
+opt-level = 3
+[profile.dev.package.tract-onnx]
+opt-level = 3
+[profile.dev.package.ndarray]
+opt-level = 3
+[profile.dev.package.rayon]
+opt-level = 3
+[profile.dev.package.rayon-core]
+opt-level = 3
+
 [profile.release]
 lto = "fat"
 codegen-units = 1

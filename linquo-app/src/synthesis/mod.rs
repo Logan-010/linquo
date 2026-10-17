@@ -282,7 +282,8 @@ pub async fn speek(
         return Err("Invalid speech rate".into());
     }
     let cancelled = app.state::<Synthesis>().begin(request_id)?;
-    blocking(move || {
+    let started = std::time::Instant::now();
+    let result = blocking(move || {
         ensure!(
             !text.trim().is_empty() && text.chars().count() <= 2000,
             "Speech text must contain 1–2000 characters"
@@ -342,7 +343,13 @@ pub async fn speek(
         }
         Ok(tauri::ipc::Response::new(bytes))
     })
-    .await
+    .await;
+    match &result {
+        Ok(_) => log::info!("Speech ready in {:.2}s", started.elapsed().as_secs_f32()),
+        Err(error) if error == "Speech cancelled" => log::debug!("Speech cancelled"),
+        Err(error) => log::error!("Speech synthesis failed: {error}"),
+    }
+    result
 }
 
 #[tauri::command]

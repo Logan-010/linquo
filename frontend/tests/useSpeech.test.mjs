@@ -14,9 +14,11 @@ function deferred() {
 }
 
 async function setup() {
-  const requests = [], cancellations = [], nodes = [], errors = [], cleanups = [];
+  const requests = [], cancellations = [], nodes = [], errors = [], statuses = [], cleanups = [];
+  let instance;
   let resume = Promise.resolve();
   class AudioContext {
+    constructor() { instance = this; }
     state = 'running';
     destination = {};
     resume() { return resume; }
@@ -37,7 +39,7 @@ async function setup() {
   const hooks = new SyntheticModule(['useLayoutEffect', 'useRef', 'useState'], function () {
     this.setExport('useLayoutEffect', effect => cleanups.push(effect()));
     this.setExport('useRef', current => ({ current }));
-    this.setExport('useState', initial => [initial, value => errors.push(value)]);
+    this.setExport('useState', initial => [initial, value => (initial === 'idle' ? statuses : errors).push(value)]);
   }, { context });
   const api = new SyntheticModule(['invoke'], function () {
     this.setExport('invoke', (command, { text, rate, requestId }) => {
@@ -57,9 +59,10 @@ async function setup() {
   const pcm = new ArrayBuffer(8);
   new DataView(pcm).setUint32(0, 44100, true);
   return {
-    ...speech, requests, cancellations, nodes, errors,
+    ...speech, requests, cancellations, nodes, errors, statuses,
     respond(index) { requests[index].resolve([...new Uint8Array(pcm)]); },
-    suspend(promise) { resume = promise; },
+    suspend(promise) { resume = promise; instance.state = 'suspended'; },
+    allowResume(callback) { instance.resume = () => { instance.state = 'running'; callback(); return Promise.resolve(); }; },
     cleanup() { cleanups.forEach(cleanup => cleanup?.()); },
   };
 }
@@ -78,6 +81,25 @@ test('rapid word clicks cancel stale inference and only play the latest word', a
   assert.equal(speech.nodes.length, 1);
   assert.equal(speech.nodes[0].started, true);
   assert.deepEqual(speech.requests.map(request => request.text), ['one', 'two', 'three']);
+  speech.cleanup();
+});
+
+test('blocked autoplay resumes generated audio without repeating inference', async () => {
+  const speech = await setup();
+  speech.speak('first');
+  const resumed = deferred();
+  speech.suspend(resumed.promise);
+  speech.speak('automatic question');
+  speech.respond(1);
+  await flush();
+  assert.equal(speech.statuses.at(-1), 'blocked');
+  assert.equal(speech.nodes.length, 0);
+  speech.allowResume(() => resumed.resolve());
+  speech.resumeAudio();
+  await flush();
+  assert.equal(speech.requests.length, 2);
+  assert.equal(speech.nodes[0].started, true);
+  assert.equal(speech.statuses.at(-1), 'playing');
   speech.cleanup();
 });
 

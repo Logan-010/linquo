@@ -1,5 +1,6 @@
 {
   "speech": {
+    "resume": "Play generated speech",
     "progressLabel": "Speech model download progress",
     "progress": "{{percent}}% · {{downloaded}} / {{total}} MB",
     "preparing": "Preparing download…",

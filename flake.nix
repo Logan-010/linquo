@@ -77,7 +77,6 @@
           [
             openssl
             sqlite
-            onnxruntime
             stdenv.cc.cc.lib
           ]
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [
@@ -112,8 +111,6 @@
               ]);
           };
           inherit nativeBuildInputs buildInputs;
-          ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
-          ORT_PREFER_DYNAMIC_LINK = "1";
           cargoBuildOptions =
             options:
             options
@@ -178,8 +175,6 @@
             ];
 
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
-            ORT_LIB_LOCATION = "${pkgs.onnxruntime}/lib";
-            ORT_PREFER_DYNAMIC_LINK = "1";
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
             GIO_EXTRA_MODULES = "${pkgs.glib-networking}/lib/gio/modules";

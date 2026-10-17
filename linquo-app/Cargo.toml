@@ -25,10 +25,9 @@ tokio = { version = "1.53.3", default-features = false, features = ["fs", "sync"
 color-eyre = "0.6"
 hf-hub = { version = "1.0.0", default-features = false, features = ["rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
-# Match the ONNX Runtime 1.27 API provided by the Nix environment.
-ort = { version = "=2.0.0-rc.14", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-native", "copy-dylibs", "api-27"] }
-ort-sys = "=2.0.0-rc.14"
-ndarray = "0.17.2"
+# Self-contained CPU inference, including 32-bit and 64-bit Android targets.
+tract-onnx = { version = "=0.23.9", default-features = false }
+tract-linalg = { version = "=0.23.9", features = ["multithread-mm"] }
 rand = "0.10.3"
 rand_distr = "0.6.0"
 unicode-normalization = "0.1"

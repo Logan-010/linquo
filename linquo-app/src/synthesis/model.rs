@@ -1,14 +1,11 @@
 //! Single-voice CPU inference adapted from Supertone's Supertonic Rust example.
 //! See THIRD_PARTY.md for attribution.
 use color_eyre::eyre::{Result, ensure, eyre};
-use ndarray::{Array, Array3};
-use ort::{
-    session::{Session, SessionInputValue},
-    value::Tensor,
-};
 use rand_distr::{Distribution, StandardNormal};
 use serde::Deserialize;
-use std::{fs::File, io::BufReader, path::Path};
+use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
+use tract_onnx::prelude::tract_ndarray::{Array, Array3};
+use tract_onnx::prelude::*;
 use unicode_normalization::UnicodeNormalization;
 
 #[derive(Deserialize)]
@@ -74,6 +71,141 @@ fn chunks(text: &str) -> Vec<&str> {
     result
 }
 
+/// Keep one shape-specialized plan per component. This bounds memory use while
+/// reusing the estimator's plan across all diffusion steps in a speech chunk.
+struct Session {
+    model: InferenceModel,
+    inputs: Vec<String>,
+    outputs: Vec<String>,
+    plan: Option<(Vec<Vec<usize>>, TypedSimpleState)>,
+}
+
+impl Session {
+    fn load(path: &Path) -> Result<Self> {
+        let model = tract_onnx::onnx()
+            // Re-infer intermediate shapes from each concrete input length.
+            .with_ignore_value_info(true)
+            .model_for_path(path)
+            .map_err(inference_error)?;
+        let inputs = model
+            .input_outlets()
+            .map_err(inference_error)?
+            .iter()
+            .map(|outlet| model.node(outlet.node).name.clone())
+            .collect();
+        let outputs = model
+            .output_outlets()
+            .map_err(inference_error)?
+            .iter()
+            .map(|outlet| {
+                model
+                    .outlet_label(*outlet)
+                    .unwrap_or(&model.node(outlet.node).name)
+                    .to_owned()
+            })
+            .collect();
+        Ok(Self {
+            model,
+            inputs,
+            outputs,
+            plan: None,
+        })
+    }
+
+    fn run(&mut self, values: Vec<(&str, Tensor)>) -> Result<HashMap<String, TValue>> {
+        let mut values: HashMap<_, _> = values.into_iter().collect();
+        let inputs: TVec<TValue> = self
+            .inputs
+            .iter()
+            .map(|name| {
+                values
+                    .remove(name.as_str())
+                    .map(IntoTValue::into_tvalue)
+                    .ok_or_else(|| eyre!("Missing model input {name}"))
+            })
+            .collect::<Result<_>>()?;
+        ensure!(values.is_empty(), "Unexpected model inputs");
+        let shapes: Vec<_> = inputs.iter().map(|value| value.shape().to_vec()).collect();
+        if self
+            .plan
+            .as_ref()
+            .is_none_or(|(cached, _)| *cached != shapes)
+        {
+            let started = std::time::Instant::now();
+            // Release the previous plan before specializing a new sequence length.
+            self.plan = None;
+            let mut model = self.model.clone();
+            for (index, value) in inputs.iter().enumerate() {
+                model
+                    .set_input_fact(
+                        index,
+                        InferenceFact::dt_shape(value.datum_type(), value.shape()),
+                    )
+                    .map_err(inference_error)?;
+            }
+            let mut model = model.into_typed().map_err(inference_error)?;
+            // Enable native matrix/convolution kernels without the broken
+            // broadcast-removal declutter pass in tract 0.23.9. Plain typed
+            // plans otherwise execute expensive reference implementations.
+            let mut optimizer = tract_onnx::tract_core::optim::Optimizer::codegen();
+            optimizer.passes.remove(3);
+            optimizer.optimize(&mut model).map_err(inference_error)?;
+            // Share a bounded pool across components; avoid oversubscribing
+            // mobile CPUs or spawning a new pool for every input shape.
+            static EXECUTOR: std::sync::OnceLock<tract_linalg::multithread::Executor> =
+                std::sync::OnceLock::new();
+            let executor = EXECUTOR.get_or_init(|| {
+                let threads = std::thread::available_parallelism()
+                    .map_or(1, usize::from)
+                    .min(4);
+                tract_linalg::multithread::Executor::multithread(threads)
+            });
+            let options = tract_onnx::tract_core::runtime::RunOptions {
+                executor: Some(executor.clone()),
+                ..Default::default()
+            };
+            let plan = model
+                .into_runnable_with_options(&options)
+                .map_err(inference_error)?;
+            self.plan = Some((
+                shapes,
+                TypedSimpleState::new(&plan).map_err(inference_error)?,
+            ));
+            log::debug!(
+                "{} plan built in {:?}",
+                self.outputs.join(","),
+                started.elapsed()
+            );
+        }
+        let started = std::time::Instant::now();
+        let outputs = self
+            .plan
+            .as_mut()
+            .unwrap()
+            .1
+            .run(inputs)
+            .map_err(inference_error)?;
+        log::debug!(
+            "{} execution took {:?}",
+            self.outputs.join(","),
+            started.elapsed()
+        );
+        Ok(self.outputs.iter().cloned().zip(outputs).collect())
+    }
+}
+
+fn inference_error(error: impl std::fmt::Display) -> color_eyre::Report {
+    eyre!("ONNX inference: {error:#}")
+}
+
+fn floats(value: &TValue) -> Result<&[f32]> {
+    value
+        .as_plain_ram()
+        .ok_or_else(|| eyre!("Expected CPU tensor"))?
+        .as_slice::<f32>()
+        .map_err(inference_error)
+}
+
 pub struct Model {
     config: Config,
     indexer: Vec<i64>,
@@ -95,12 +227,8 @@ impl Model {
             "Invalid speech configuration"
         );
         let voice: Voice = json(&root.join("voice_styles/M1.json"))?;
-        let environment = ort::init().with_name("linquo-synthesis").build()?;
         let session = |name: &str| -> Result<Session> {
-            Ok(Session::builder(&environment)?
-                .with_intra_threads(2)
-                .map_err(ort::Error::<()>::from)?
-                .commit_from_file(root.join(format!("onnx/{name}.onnx")))?)
+            Session::load(&root.join(format!("onnx/{name}.onnx")))
         };
         Ok(Self {
             config,
@@ -146,18 +274,16 @@ impl Model {
                 .chars()
                 .map(|c| self.indexer.get(c as usize).copied().unwrap_or(-1))
                 .collect();
-            let mask = Tensor::from_array(Array3::<f32>::ones((1, 1, ids.len())))?;
-            let ids = Tensor::from_array(Array::from_shape_vec((1, ids.len()), ids)?)?;
-            let dp = Tensor::from_array(self.dp.clone())?;
-            let ttl = Tensor::from_array(self.ttl.clone())?;
+            let mask = Array3::<f32>::ones((1, 1, ids.len())).into_tensor();
+            let ids = Array::from_shape_vec((1, ids.len()), ids)?.into_tensor();
+            let dp = self.dp.clone().into_tensor();
+            let ttl = self.ttl.clone().into_tensor();
             let outputs = self.duration.run(vec![
-                ("text_ids", SessionInputValue::from(ids.view())),
-                ("style_dp", dp.view().into()),
-                ("text_mask", mask.view().into()),
+                ("text_ids", ids.clone()),
+                ("style_dp", dp),
+                ("text_mask", mask.clone()),
             ])?;
-            let duration = *outputs["duration"]
-                .try_extract_tensor::<f32>()?
-                .1
+            let duration = *floats(&outputs["duration"])?
                 .first()
                 .ok_or_else(|| eyre!("Missing duration"))?
                 / (1.05 * rate);
@@ -168,44 +294,39 @@ impl Model {
             let samples = (duration * self.config.ae.sample_rate as f32) as usize;
             check()?;
             let outputs = self.encoder.run(vec![
-                ("text_ids", SessionInputValue::from(ids.view())),
-                ("style_ttl", ttl.view().into()),
-                ("text_mask", mask.view().into()),
+                ("text_ids", ids),
+                ("style_ttl", ttl.clone()),
+                ("text_mask", mask.clone()),
             ])?;
             let embedding = &outputs["text_emb"];
             let compress = self.config.ttl.chunk_compress_factor;
             let length = samples.div_ceil(self.config.ae.base_chunk_size * compress);
             let mut rng = rand::rng();
-            let mut latent = Tensor::from_array(Array3::<f32>::from_shape_fn(
+            let mut latent = Array3::<f32>::from_shape_fn(
                 (1, self.config.ttl.latent_dim * compress, length),
                 |_| StandardNormal.sample(&mut rng),
-            ))?;
-            let latent_mask = Tensor::from_array(Array3::<f32>::ones((1, 1, length)))?;
+            )
+            .into_tensor();
+            let latent_mask = Array3::<f32>::ones((1, 1, length)).into_tensor();
             const STEPS: usize = 5;
-            let total = Tensor::from_array(Array::from_elem(1, STEPS as f32))?;
+            let total = Array::from_elem(1, STEPS as f32).into_tensor();
             for step in 0..STEPS {
                 check()?;
-                let current = Tensor::from_array(Array::from_elem(1, step as f32))?;
+                let current = Array::from_elem(1, step as f32).into_tensor();
                 let outputs = self.estimator.run(vec![
-                    ("noisy_latent", SessionInputValue::from(latent.view())),
-                    ("text_emb", embedding.view().into()),
-                    ("style_ttl", ttl.view().into()),
-                    ("latent_mask", latent_mask.view().into()),
-                    ("text_mask", mask.view().into()),
-                    ("current_step", current.view().into()),
-                    ("total_step", total.view().into()),
+                    ("noisy_latent", latent),
+                    ("text_emb", embedding.clone().into_tensor()),
+                    ("style_ttl", ttl.clone()),
+                    ("latent_mask", latent_mask.clone()),
+                    ("text_mask", mask.clone()),
+                    ("current_step", current),
+                    ("total_step", total.clone()),
                 ])?;
-                latent = Tensor::from_array(
-                    outputs["denoised_latent"]
-                        .try_extract_array::<f32>()?
-                        .to_owned(),
-                )?;
+                latent = outputs["denoised_latent"].clone().into_tensor();
             }
             check()?;
-            let outputs = self
-                .vocoder
-                .run(vec![("latent", SessionInputValue::from(latent.view()))])?;
-            let (_, data) = outputs["wav_tts"].try_extract_tensor::<f32>()?;
+            let outputs = self.vocoder.run(vec![("latent", latent)])?;
+            let data = floats(&outputs["wav_tts"])?;
             audio.extend(data.iter().take(samples).map(|v| v.clamp(-1.0, 1.0)));
         }
         Ok((audio, self.config.ae.sample_rate))
@@ -215,6 +336,32 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::chunks;
+
+    /// Run explicitly with LINQUO_TEST_MODEL_DIR pointing to Supertonic's cache.
+    #[test]
+    #[ignore = "requires downloaded Supertonic models"]
+    fn synthesizes_with_tract() -> color_eyre::eyre::Result<()> {
+        let root = std::env::var("LINQUO_TEST_MODEL_DIR")?;
+        let mut model = super::Model::load(std::path::Path::new(&root))?;
+        for text in [
+            "Hello.",
+            "A longer sentence.",
+            "Please choose the correct translation of this sentence from the options below.",
+        ] {
+            let started = std::time::Instant::now();
+            let (audio, sample_rate) = model.speak(text, 1.0, || Ok(()))?;
+            eprintln!(
+                "{text:?}: {:?} for {:.2}s audio",
+                started.elapsed(),
+                audio.len() as f32 / sample_rate as f32
+            );
+            assert!(sample_rate > 0);
+            assert!(!audio.is_empty());
+            assert!(audio.iter().all(|sample| sample.is_finite()));
+            assert!(audio.iter().any(|sample| sample.abs() > 0.001));
+        }
+        Ok(())
+    }
 
     #[test]
     fn chunks_preserve_words_and_multibyte_text() {
